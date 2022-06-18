@@ -60,7 +60,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::recv_msg()
    {
-      socket.async_receive_from(buffer(recv_buffer), remote_endpoint,
+      socket.async_receive_from(buffer(tmpMsgIn.body, rft::PACKET_SIZE), remote_endpoint,
                                 boost::bind(&Client::handle_receive, this,
                                             boost::asio::placeholders::error,
                                             boost::asio::placeholders::bytes_transferred));
@@ -70,7 +70,7 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Client] Received message";
-         PLOG_INFO << "\"" + std::string(recv_buffer) + "\"";
+         PLOG_INFO << "\"" + std::string(tmpMsgIn.body) + "\"";
       } else {
          PLOG_WARNING << "[Client] Error on Receive: " + error.to_string();
       }

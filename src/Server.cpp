@@ -30,7 +30,7 @@ namespace rft
    void Server::receive_msg()
    {
       socket.async_receive_from(
-          buffer(recv_buffer), remote_endpoint,
+          buffer(tmpMsgIn.body, rft::PACKET_SIZE), remote_endpoint,
           boost::bind(&Server::handle_receive, this,
                       boost::asio::placeholders::error,
                       boost::asio::placeholders::bytes_transferred));
@@ -40,9 +40,9 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Server] Received message";
-         PLOG_INFO << "\"" + std::string(recv_buffer) + "\"";
+         PLOG_INFO << "\"" + std::string(tmpMsgIn.body) + "\"";
 
-         std::string msg = std::string("Echoing: ") + recv_buffer;
+         std::string msg = std::string("Echoing: ") + tmpMsgIn.body;
          send_msg_to_client(msg, remote_endpoint);
       } else {
          PLOG_WARNING << "[Server] Error on Receive: " + error.to_string();
