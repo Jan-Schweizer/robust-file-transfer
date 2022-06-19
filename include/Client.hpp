@@ -10,40 +10,34 @@ namespace rft
 {
    class Client
    {
+      // ------------------------------------------------------------------------
+      class FileTransfer
+      {
+         friend class Client;
+         std::string file_name;
+         ConnectionID connectionId;
+      };
+      // ------------------------------------------------------------------------
+
     public:
       Client(boost::asio::io_context& io_context, std::string host, size_t port);
       Client(const Client& other) = delete;
       Client(const Client&& other) = delete;
       ~Client();
 
-      void send_msg(char msg[512]);
+      void send_msg(Message<ClientMsgType>& msg);
       void recv_msg();
 
     private:
-      // ------------------------------------------------------------------------
-      enum MsgType : uint8_t
-      {
-         // Standard Types
-         FILE_REQUEST = 0b0000,
-
-         // Error Types
-         RETRANSMISSION_REQUEST = 0b1000
-      };
-      // ------------------------------------------------------------------------
-      class FileTransfer
-      {
-         friend class Client;
-         std::string file_name;
-      };
-      // ------------------------------------------------------------------------
-
-      using connectionID = uint16_t;
+      void create_echo_msg();
 
       bool resolve_server();
       void stop();
 
       void handle_receive(const boost::system::error_code& error, size_t bytes_transferred);
-      void handle_send(const std::string& msg, const boost::system::error_code& error, size_t bytes_transferred);
+      void handle_send(const boost::system::error_code& error, size_t bytes_transferred);
+
+      void decode_msg(char msg[PACKET_SIZE]);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
@@ -51,11 +45,11 @@ namespace rft
       size_t port;
       boost::asio::ip::udp::endpoint server_endpoint;
       boost::asio::ip::udp::endpoint remote_endpoint;
-      std::unordered_map<connectionID, FileTransfer> fileTransfers;
+      std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
 
-      Message<MsgType> tmpMsgIn;
-      Message<MsgType> tmpMsgOut;
-      MessageQueue<Message<MsgType>> msgQueue;
+      Message<ServerMsgType> tmpMsgIn{};
+      Message<ClientMsgType> tmpMsgOut{};
+      MessageQueue<Message<ServerMsgType>> msgQueue;
    };
 }
 // ------------------------------------------------------------------------

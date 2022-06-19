@@ -10,6 +10,15 @@ namespace rft
 {
    class Server
    {
+      // ------------------------------------------------------------------------
+      class FileTransfer
+      {
+         friend class Server;
+
+         boost::asio::ip::udp::endpoint client;
+      };
+      // ------------------------------------------------------------------------
+
     public:
       Server(boost::asio::io_context& io_context, size_t port);
       Server(const Server& other) = delete;
@@ -20,41 +29,24 @@ namespace rft
       void stop();
 
     private:
-      // ------------------------------------------------------------------------
-      enum MsgType : uint8_t
-      {
-         // Standard Types
-         PAYLOAD = 0b0000,
-
-         // Error Types
-         FILE_NOT_FOUND = 0b1000
-      };
-      // ------------------------------------------------------------------------
-      class FileTransfer
-      {
-         friend class Server;
-
-         boost::asio::ip::udp::endpoint client;
-      };
-      // ------------------------------------------------------------------------
-
-      using connectionID = uint16_t;
-
       void receive_msg();
-      void send_msg_to_client(std::string msg, boost::asio::ip::udp::endpoint client);
+      void send_msg_to_client(Message<ServerMsgType>& msg, const boost::asio::ip::udp::endpoint& client);
 
       void handle_receive(const boost::system::error_code& error, size_t bytes_transferred);
-      void handle_send(const std::string& msg, const boost::system::error_code& error, size_t bytes_transferred);
+      void handle_send(const boost::system::error_code& error, size_t bytes_transferred);
+
+      void decode_msg(char msg[PACKET_SIZE]);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
       size_t port;
       boost::asio::ip::udp::endpoint remote_endpoint;
-      std::unordered_map<connectionID, FileTransfer> fileTransfers;
+      std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
+      ConnectionID connectionIdPool = 0;
 
-      Message<MsgType> tmpMsgIn;
-      Message<MsgType> tmpMsgOut;
-      MessageQueue<Message<MsgType>> messageQueue;
+      Message<ClientMsgType> tmpMsgIn{};
+      Message<ServerMsgType> tmpMsgOut{};
+      MessageQueue<Message<ClientMsgType>> messageQueue;
    };
 }// namespace rft
 // ------------------------------------------------------------------------
