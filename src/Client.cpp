@@ -7,7 +7,7 @@ namespace rft
 {
    using namespace boost::asio;
    // ------------------------------------------------------------------------
-   Client::Client(boost::asio::io_context& io_context, std::string host, const size_t port)
+   Client::Client(std::string host, const size_t port)
        : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port)
    {
       bool server_resolved = resolve_server();
@@ -18,6 +18,8 @@ namespace rft
       create_echo_msg();
 
       send_msg(tmpMsgOut);
+
+      start();
    }
    // ------------------------------------------------------------------------
    Client::~Client() { stop(); }
@@ -36,8 +38,14 @@ namespace rft
       return true;
    }
    // ------------------------------------------------------------------------
+   void Client::start()
+   {
+      thread_context = std::thread([this]() { io_context.run(); });
+   }
+   // ------------------------------------------------------------------------
    void Client::stop()
    {
+      if (thread_context.joinable()) thread_context.join();
       io_context.stop();
       PLOG_INFO << "[Client] Disconnected!";
    }
@@ -48,8 +56,6 @@ namespace rft
                            boost::bind(&Client::handle_send, this,
                                        boost::asio::placeholders::error,
                                        boost::asio::placeholders::bytes_transferred));
-
-      recv_msg();
    }
    // ------------------------------------------------------------------------
    void Client::handle_send(const boost::system::error_code& error, size_t bytes_transferred)
@@ -60,6 +66,7 @@ namespace rft
       } else {
          PLOG_WARNING << "[Client] Error on Send: " + error.to_string();
       }
+      recv_msg();
    }
    // ------------------------------------------------------------------------
    void Client::recv_msg()
@@ -75,19 +82,33 @@ namespace rft
       if (!error) {
          PLOG_INFO << "[Client] Received message";
          PLOG_INFO << "\"" + std::string(&tmpMsgIn.body[3]) + "\"";
-         decode_msg(tmpMsgIn.body);
+         enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Client] Error on Receive: " + error.to_string();
       }
    }
    // ------------------------------------------------------------------------
-   void Client::decode_msg(char msg[PACKET_SIZE])
+   void Client::decode_msg(size_t bytes_transferred)
    {
+      auto& msg = tmpMsgIn.body;
+
       ConnectionID connectionId = *reinterpret_cast<ConnectionID*>(&msg[0]);
       uint8_t msgType = msg[2] >> 4;
       uint8_t version = msg[2] & 0b00001111;
       std::string payload(&msg[3]);
+
+      tmpMsgIn.header.type = static_cast<ServerMsgType>(msgType);
+      tmpMsgIn.header.size = bytes_transferred - sizeof(ConnectionID) - 1;
+
       PLOG_INFO << "ConnectionID: " << connectionId << " - msgType: " << +msgType << " - version: " << +version << " - payload: " << payload;
+   }
+   // ------------------------------------------------------------------------
+   void Client::enqueue_msg(size_t bytes_transferred)
+   {
+      decode_msg(bytes_transferred);
+      msgQueue.push_back(tmpMsgIn);
+
+      // Timer and send msg
    }
    // ------------------------------------------------------------------------
    void Client::create_echo_msg()

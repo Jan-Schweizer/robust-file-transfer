@@ -33,7 +33,7 @@ namespace rft
    template<typename MsgType>
    struct Message {
       MessageHeader<MsgType> header;
-      char body[PACKET_SIZE];
+      char body[PACKET_SIZE]{'\0'};
    };
 }// namespace rft
 // ------------------------------------------------------------------------

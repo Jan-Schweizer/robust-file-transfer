@@ -20,7 +20,7 @@ namespace rft
       // ------------------------------------------------------------------------
 
     public:
-      Server(boost::asio::io_context& io_context, size_t port);
+      explicit Server(size_t port);
       Server(const Server& other) = delete;
       Server(const Server&& other) = delete;
       ~Server();
@@ -29,24 +29,31 @@ namespace rft
       void stop();
 
     private:
+      void echo_msg(Message<ClientMsgType>& msg);
+
       void receive_msg();
       void send_msg_to_client(Message<ServerMsgType>& msg, const boost::asio::ip::udp::endpoint& client);
 
       void handle_receive(const boost::system::error_code& error, size_t bytes_transferred);
       void handle_send(const boost::system::error_code& error, size_t bytes_transferred);
 
-      void decode_msg(char msg[PACKET_SIZE]);
+      void decode_msg(size_t bytes_transferred);
+      void enqueue_msg(size_t bytes_transferred);
+
+      [[noreturn]] void process_msgs();
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
+      std::thread thread_context;
       size_t port;
       boost::asio::ip::udp::endpoint remote_endpoint;
+
       std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
       ConnectionID connectionIdPool = 0;
 
       Message<ClientMsgType> tmpMsgIn{};
       Message<ServerMsgType> tmpMsgOut{};
-      MessageQueue<Message<ClientMsgType>> messageQueue;
+      MessageQueue<Message<ClientMsgType>> msgQueue;
    };
 }// namespace rft
 // ------------------------------------------------------------------------

@@ -118,17 +118,14 @@ int main(int argc, char* argv[])
 
    if (is_server) {
       try {
-         boost::asio::io_context io_context;
-         rft::Server server(io_context, port);
-         io_context.run();
+         rft::Server server(port);
+         server.start();
       } catch (std::exception& e) {
          PLOG_ERROR << e.what();
       }
    } else if (is_client) {
       try {
-         boost::asio::io_context io_context;
-         rft::Client client(io_context, host, port);
-         io_context.run();
+         rft::Client client(host, port);
       } catch (std::exception& e) {
          PLOG_ERROR << e.what();
       }

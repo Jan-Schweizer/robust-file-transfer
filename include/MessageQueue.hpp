@@ -3,6 +3,7 @@
 // ------------------------------------------------------------------------
 #include "Message.hpp"
 #include <condition_variable>
+#include <plog/Log.h>
 #include <deque>
 #include <mutex>
 // ------------------------------------------------------------------------
@@ -17,19 +18,19 @@ namespace rft
 
       const Message& front()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          return deque.front();
       }
 
       const Message& back()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          return deque.back();
       }
 
       Message pop_front()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          Message msg = std::move(deque.front());
          deque.pop_front();
          return msg;
@@ -37,7 +38,7 @@ namespace rft
 
       Message pop_back()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          Message msg = std::move(deque.back());
          deque.pop_back();
          return msg;
@@ -45,53 +46,53 @@ namespace rft
 
       void push_front(const Message& msg)
       {
-         std::unique_lock lock_1(muxQueue);
+         std::unique_lock lock_1(mux_queue);
          deque.emplace_front(std::move(msg));
 
-         std::unique_lock lock_2(muxCv);
+         std::unique_lock lock_2(mux_cv);
          cv.notify_one();
       }
 
       void push_back(const Message& msg)
       {
-         std::unique_lock lock_1(muxQueue);
+         std::unique_lock lock_1(mux_queue);
          deque.emplace_back(std::move(msg));
 
-         std::unique_lock lock_2(muxCv);
+         std::unique_lock lock_2(mux_cv);
          cv.notify_one();
       }
 
       bool empty()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          return deque.empty();
       }
 
       size_t count()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          return deque.size();
       }
 
       void clear()
       {
-         std::unique_lock lock(muxQueue);
+         std::unique_lock lock(mux_queue);
          return deque.clear();
       }
 
       void wait()
       {
          while (empty()) {
-            std::unique_lock lock(muxCv);
+            std::unique_lock lock(mux_cv);
             cv.wait(lock);
          }
       }
 
     private:
-      std::mutex muxQueue;
+      std::mutex mux_queue;
       std::deque<Message> deque;
       std::condition_variable cv;
-      std::mutex muxCv;
+      std::mutex mux_cv;
    };
 }// namespace rft
 // ------------------------------------------------------------------------
