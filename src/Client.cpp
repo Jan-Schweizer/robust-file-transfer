@@ -8,7 +8,7 @@ namespace rft
    using namespace boost::asio;
    // ------------------------------------------------------------------------
    Client::Client(std::string host, const size_t port)
-       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port)
+       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port), t(io_context, chrono::seconds(0))
    {
       bool server_resolved = resolve_server();
       if (!server_resolved) {
@@ -108,7 +108,8 @@ namespace rft
       decode_msg(bytes_transferred);
       msgQueue.push_back(tmpMsgIn);
 
-      // Timer and send msg
+      t.expires_at(t.expiry() + chrono::seconds(3));
+      t.async_wait(boost::bind(&Client::send_msg, this, tmpMsgOut));
    }
    // ------------------------------------------------------------------------
    void Client::create_echo_msg()

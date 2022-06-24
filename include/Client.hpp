@@ -54,6 +54,8 @@ namespace rft
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};
       MessageQueue<Message<ServerMsgType>> msgQueue;
+
+      boost::asio::steady_timer t;
    };
 }
 // ------------------------------------------------------------------------
