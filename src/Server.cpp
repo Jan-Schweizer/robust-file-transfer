@@ -1,11 +1,13 @@
 // ------------------------------------------------------------------------
 #include "Server.hpp"
+#include "util.hpp"
 #include <boost/bind/bind.hpp>
+#include <filesystem>
+#include <fstream>
 #include <plog/Log.h>
 // ------------------------------------------------------------------------
 namespace rft
 {
-   using namespace boost::asio;
    // ------------------------------------------------------------------------
    Server::Server(const size_t port)
        : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port)), port(port) {}
@@ -41,17 +43,16 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Server] Received message";
-         PLOG_INFO << "\"" + std::string(&tmpMsgIn.body[3]) + "\"";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Server] Error on Receive: " + error.to_string();
       }
    }
    // ------------------------------------------------------------------------
-   void Server::send_msg_to_client(Message<ServerMsgType>& msg, const ip::udp::endpoint& client)
+   void Server::send_msg_to_client(Message<ServerMsgType> msg, const ip::udp::endpoint& client)
    {
-      // change remote_endpoint to parameter client
-      socket.async_send_to(buffer(msg.body, PACKET_SIZE), client,
+      hexdump(msg.body, msg.header.size);
+      socket.async_send_to(buffer(msg.body, msg.header.size), client,
                            boost::bind(&Server::handle_send, this,
                                        boost::asio::placeholders::error,
                                        boost::asio::placeholders::bytes_transferred));
@@ -61,25 +62,9 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Server] Send message";
-         PLOG_INFO << "\"" + std::string(&tmpMsgOut.body[3]) + "\"";
       } else {
          PLOG_WARNING << "[Server] Error on Send: " + error.to_string();
       }
-   }
-   // ------------------------------------------------------------------------
-   void Server::decode_msg(size_t bytes_transferred)
-   {
-      auto& msg = tmpMsgIn.body;
-
-      ConnectionID connectionId = *reinterpret_cast<ConnectionID*>(&msg[0]);
-      uint8_t msgType = msg[2] >> 4;
-      uint8_t version = msg[2] & 0b00001111;
-      std::string payload(&msg[3]);
-
-      tmpMsgIn.header.type = static_cast<ClientMsgType>(msgType);
-      tmpMsgIn.header.size = bytes_transferred - sizeof(ConnectionID) - 1;
-
-      PLOG_INFO << "ConnectionID: " << connectionId << " - msgType: " << +msgType << " - version: " << +version << " - payload: " << payload;
    }
    // ------------------------------------------------------------------------
    void Server::enqueue_msg(size_t bytes_transferred)
@@ -90,34 +75,79 @@ namespace rft
       receive_msg();
    }
    // ------------------------------------------------------------------------
+   void Server::decode_msg(size_t bytes_transferred)
+   {
+      auto& msg = tmpMsgIn.body;
+
+      auto msgType = static_cast<ClientMsgType>(msg[0]);
+
+      tmpMsgIn.header.type = msgType;
+      tmpMsgIn.header.size = bytes_transferred;
+      tmpMsgIn.header.remote = remote_endpoint;
+   }
+   // ------------------------------------------------------------------------
    void Server::process_msgs()
    {
       while (true) {
          msgQueue.wait();
 
-         size_t msgCount = 0;
          while (!msgQueue.empty()) {
             auto msg = msgQueue.pop_front();
-            echo_msg(msg);
-            ++msgCount;
+            dispatch_msg(msg);
          }
       }
    }
    // ------------------------------------------------------------------------
-   void Server::echo_msg(Message<ClientMsgType>& msg)
+   void Server::dispatch_msg(Message<ClientMsgType>& msg)
    {
-      std::string response("Echoing: " + std::string(&msg.body[3]));
+      switch (msg.header.type) {
+         case FILE_REQUEST:
+            handle_file_request(msg);
+            break;
+         case TRANSMISSION_REQUEST:
+         case RETRANSMISSION_REQUEST:
+         case CLIENT_ERROR:
+            break;
+         // Ignore unknown packets
+         default:
+            return;
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_file_request(Message<ClientMsgType>& msg)
+   {
+      std::string filename(&msg.body[3]);
+      PLOG_INFO << "[Server] Client requesting file: " << filename;
 
-      tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
-      tmpMsgOut.header.size = response.size() + 1;
+      std::ifstream file(filename, std::ios::in | std::ios::binary);
+      if (!file) {
+         PLOG_ERROR << "[Server] File: " << filename << " does not exist!";
+         // TODO: send back error message
+         return;
+      }
 
-      ++connectionIdPool;
-      std::memcpy(&tmpMsgOut.body[0], &connectionIdPool, sizeof(uint16_t));
-      tmpMsgOut.body[2] = ServerMsgType::PAYLOAD << 4;
-      tmpMsgOut.body[2] = tmpMsgOut.body[2] | 0b0001;
-      std::memcpy(&tmpMsgOut.body[3], response.data(), response.size() + 1);
+      ConnectionID connectionId = connectionIdPool++;
+      uint32_t fileSize = std::filesystem::file_size(filename);
+      std::string sha256 = compute_SHA256(filename);
 
-      send_msg_to_client(tmpMsgOut, remote_endpoint);
+      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize}});
+
+      // Build Initial Response Packet with file metadata
+      tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
+      tmpMsgOut.header.size = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint32_t) + sha256.size() + filename.size() + 1;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+      char* payload = tmpMsgOut.body;
+      *payload = ServerMsgType::SERVER_INITIAL_RESPONSE;
+      payload += sizeof(uint8_t);
+      std::memcpy(payload, &connectionId, sizeof(ConnectionID));
+      payload += sizeof(ConnectionID);
+      std::memcpy(payload, &fileSize, sizeof(uint32_t));
+      payload += sizeof(uint32_t);
+      std::memcpy(payload, sha256.data(), SHA256_SIZE);
+      payload += sha256.size();
+      std::memcpy(payload, filename.data(), filename.size() + 1);
+
+      send_msg_to_client(tmpMsgOut, msg.header.remote);
    }
    // ------------------------------------------------------------------------
 }// namespace rft

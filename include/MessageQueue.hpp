@@ -82,6 +82,7 @@ namespace rft
 
       void wait()
       {
+         // TODO: maybe move the lock to here
          while (empty()) {
             std::unique_lock lock(mux_cv);
             cv.wait(lock);

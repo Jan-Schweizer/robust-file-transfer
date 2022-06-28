@@ -2,8 +2,10 @@
 #define ROBUST_FILE_TRANSFER_SERVER_HPP
 // ------------------------------------------------------------------------
 #include "MessageQueue.hpp"
-#include <boost/asio.hpp>
+#include "common.hpp"
+#include <fstream>
 #include <unordered_map>
+#include <utility>
 // ------------------------------------------------------------------------
 namespace rft
 // ------------------------------------------------------------------------
@@ -15,7 +17,12 @@ namespace rft
       {
          friend class Server;
 
+         FileTransfer(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize)
+             : client(std::move(client)), file(std::move(file)), fileSize(fileSize) {}
+
          boost::asio::ip::udp::endpoint client;
+         std::ifstream file;
+         uint32_t fileSize;
       };
       // ------------------------------------------------------------------------
 
@@ -29,18 +36,20 @@ namespace rft
       void stop();
 
     private:
-      void echo_msg(Message<ClientMsgType>& msg);
+      [[noreturn]] void process_msgs();
+
+      void dispatch_msg(Message<ClientMsgType>& msg);
 
       void receive_msg();
-      void send_msg_to_client(Message<ServerMsgType>& msg, const boost::asio::ip::udp::endpoint& client);
+      void send_msg_to_client(Message<ServerMsgType> msg, const boost::asio::ip::udp::endpoint& client);
 
       void handle_receive(const boost::system::error_code& error, size_t bytes_transferred);
       void handle_send(const boost::system::error_code& error, size_t bytes_transferred);
 
-      void decode_msg(size_t bytes_transferred);
       void enqueue_msg(size_t bytes_transferred);
+      void decode_msg(size_t bytes_transferred);
 
-      [[noreturn]] void process_msgs();
+      void handle_file_request(Message<ClientMsgType>& msg);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;

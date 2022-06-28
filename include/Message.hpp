@@ -9,25 +9,29 @@ namespace rft
    enum ClientMsgType : uint8_t
    {
       // Standard Types
-      FILE_REQUEST = 0,
+      FILE_REQUEST = 0,// aka Client Initial Request
+      TRANSMISSION_REQUEST = 1,
+      RETRANSMISSION_REQUEST = 2,
 
       // Error Types
-      RETRANSMISSION_REQUEST = 8
+      CLIENT_ERROR = 8
    };
    // ------------------------------------------------------------------------
    enum ServerMsgType : uint8_t
    {
       // Standard Types
-      PAYLOAD = 0,
+      SERVER_INITIAL_RESPONSE = 0,
+      PAYLOAD = 1,// aka Server Data Response
 
       // Error Types
-      FILE_NOT_FOUND = 8
+      SERVER_ERROR = 8
    };
    // ------------------------------------------------------------------------
    template<typename MsgType>
    struct MessageHeader {
       MsgType type;
-      uint16_t size;
+      uint16_t size{};
+      boost::asio::ip::udp::endpoint remote;
    };
    // ------------------------------------------------------------------------
    template<typename MsgType>

@@ -15,6 +15,7 @@ set(SRC_CC
     "${CMAKE_SOURCE_DIR}/rft.cpp"
     "${CMAKE_SOURCE_DIR}/src/Server.cpp"
     "${CMAKE_SOURCE_DIR}/src/Client.cpp"
+    "${CMAKE_SOURCE_DIR}/src/util.cpp"
     "${hash_SOURCE_DIR}/sha256.cpp"
     )
 

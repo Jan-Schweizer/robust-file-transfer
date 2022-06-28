@@ -23,6 +23,7 @@ int main(int argc, char* argv[])
    double p;
    double q;
    string dest;
+   vector<string> files;
    bool is_server = false;
    bool is_client = false;
 
@@ -83,7 +84,7 @@ int main(int argc, char* argv[])
             throw std::logic_error{"Must specify files in client mode"};
          }
          cout << "Files to transfer: ";
-         const vector<string> files = vm["files"].as<vector<string>>();
+         files = vm["files"].as<vector<string>>();
          for (const auto& file: files) {
             cout << file << ", ";
          }
@@ -110,7 +111,7 @@ int main(int argc, char* argv[])
 
       cout << "p: " << p << "\tq: " << q << endl;
 
-      cout << "File destination: " << vm["dest"].as<string>() << endl;
+      cout << "File destination: " << dest << endl;
 
    } catch (const exception& ex) {
       cerr << ex.what() << endl;
@@ -125,7 +126,8 @@ int main(int argc, char* argv[])
       }
    } else if (is_client) {
       try {
-         rft::Client client(host, port);
+         rft::Client client(host, port, dest);
+         client.request_files(files);
       } catch (std::exception& e) {
          PLOG_ERROR << e.what();
       }

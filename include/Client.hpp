@@ -2,7 +2,8 @@
 #define ROBUST_FILE_TRANSFER_CLIENT_HPP
 // ------------------------------------------------------------------------
 #include "MessageQueue.hpp"
-#include <boost/asio.hpp>
+#include "common.hpp"
+#include <fstream>
 #include <unordered_map>
 // ------------------------------------------------------------------------
 namespace rft
@@ -14,32 +15,53 @@ namespace rft
       class FileTransfer
       {
          friend class Client;
+
+//         FileTransfer() = default;
+
+         FileTransfer(std::string& fileName, uint32_t fileSize, char sha256[SHA256_SIZE])
+             : fileName(std::move(fileName)), fileSize(fileSize)
+         {
+            std::memcpy(this->sha256, sha256, SHA256_SIZE);
+            file.open(this->fileName, std::ios::binary | std::ios::out | std::ios::app | std::ios::trunc);
+         }
+
          std::string fileName;
-         ConnectionID connectionId;
+         std::ofstream file;
+         uint32_t fileSize;
+         char sha256[SHA256_SIZE]{};
+         bool done = false;
       };
       // ------------------------------------------------------------------------
 
     public:
-      Client(std::string host, size_t port);
+      Client(std::string host, size_t port, std::string& fileDest);
       Client(const Client& other) = delete;
       Client(const Client&& other) = delete;
       ~Client();
 
-      void send_msg(Message<ClientMsgType>& msg);
-      void recv_msg();
+      void request_files(std::vector<std::string>& files);
 
     private:
-      void create_echo_msg();
-
-      bool resolve_server();
+      void resolve_server();
       void start();
       void stop();
+
+      void request_file(std::string& filename);
+
+      void process_msgs();
+
+      void dispatch_msg(Message<ServerMsgType>& msg);
+
+      void send_msg(Message<ClientMsgType> msg);
+      void receive_msg();
 
       void handle_receive(const boost::system::error_code& error, size_t bytes_transferred);
       void handle_send(const boost::system::error_code& error, size_t bytes_transferred);
 
-      void decode_msg(size_t bytes_transferred);
       void enqueue_msg(size_t bytes_transferred);
+      void decode_msg(size_t bytes_transferred);
+
+      void handle_initial_response(Message<ServerMsgType>& msg);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
@@ -49,13 +71,13 @@ namespace rft
       boost::asio::ip::udp::endpoint server_endpoint;
       boost::asio::ip::udp::endpoint remote_endpoint;
 
+      std::string fileDest;
       std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
 
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};
       MessageQueue<Message<ServerMsgType>> msgQueue;
-
-      boost::asio::steady_timer t;
+      bool done = false;
    };
 }
 // ------------------------------------------------------------------------

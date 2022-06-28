@@ -1,30 +1,22 @@
 // ------------------------------------------------------------------------
 #include "Client.hpp"
+#include "util.hpp"
 #include <boost/bind/bind.hpp>
+#include <numeric>
 #include <plog/Log.h>
 // ------------------------------------------------------------------------
 namespace rft
 {
-   using namespace boost::asio;
    // ------------------------------------------------------------------------
-   Client::Client(std::string host, const size_t port)
-       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port), t(io_context, chrono::seconds(0))
+   Client::Client(std::string host, const size_t port, std::string& fileDest)
+       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port), fileDest(std::move(fileDest))
    {
-      bool server_resolved = resolve_server();
-      if (!server_resolved) {
-         return;
-      }
-
-      create_echo_msg();
-
-      send_msg(tmpMsgOut);
-
-      start();
+      resolve_server();
    }
    // ------------------------------------------------------------------------
    Client::~Client() { stop(); }
    // ------------------------------------------------------------------------
-   bool Client::resolve_server()
+   void Client::resolve_server()
    {
       try {
          ip::udp::resolver resolver(io_context);
@@ -33,14 +25,16 @@ namespace rft
          PLOG_INFO << "[Client] Resolved server at " + server_endpoint.address().to_string() + ":" + std::to_string(server_endpoint.port());
       } catch (std::exception& e) {
          PLOG_ERROR << "[Client] Error while trying to resolve_server to server";
-         return false;
+         throw e;
       }
-      return true;
    }
    // ------------------------------------------------------------------------
    void Client::start()
    {
+      receive_msg();
       thread_context = std::thread([this]() { io_context.run(); });
+
+      process_msgs();
    }
    // ------------------------------------------------------------------------
    void Client::stop()
@@ -50,9 +44,37 @@ namespace rft
       PLOG_INFO << "[Client] Disconnected!";
    }
    // ------------------------------------------------------------------------
-   void Client::send_msg(Message<ClientMsgType>& msg)
+   void Client::request_files(std::vector<std::string>& files)
    {
-      socket.async_send_to(buffer(msg.body, PACKET_SIZE), server_endpoint,
+      for (auto& file: files) {
+         request_file(file);
+      }
+
+      start();
+   }
+   // ------------------------------------------------------------------------
+   void Client::request_file(std::string& filename)
+   {
+      tmpMsgOut.header.type = ClientMsgType::FILE_REQUEST;
+      tmpMsgOut.header.size = sizeof(uint8_t) + sizeof(ConnectionID) + filename.size() + 1;// 1 byte for \0
+
+      char* payload = tmpMsgOut.body;
+      *payload = ClientMsgType::FILE_REQUEST;
+      payload += sizeof(uint8_t);
+      // Initial ConnectionId is set to 0
+      *payload = 0;
+      ++payload;
+      *payload = 0;
+      ++payload;
+      std::memcpy(payload, filename.data(), filename.size() + 1);
+
+      PLOG_INFO << "[Client] Requesting file: " << filename;
+      send_msg(tmpMsgOut);
+   }
+   // ------------------------------------------------------------------------
+   void Client::send_msg(Message<ClientMsgType> msg)
+   {
+      socket.async_send_to(buffer(msg.body, msg.header.size), server_endpoint,
                            boost::bind(&Client::handle_send, this,
                                        boost::asio::placeholders::error,
                                        boost::asio::placeholders::bytes_transferred));
@@ -62,14 +84,12 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Client] Send message";
-         PLOG_INFO << "\"" + std::string(&tmpMsgOut.body[3]) + "\"";
       } else {
          PLOG_WARNING << "[Client] Error on Send: " + error.to_string();
       }
-      recv_msg();
    }
    // ------------------------------------------------------------------------
-   void Client::recv_msg()
+   void Client::receive_msg()
    {
       socket.async_receive_from(buffer(tmpMsgIn.body, PACKET_SIZE), remote_endpoint,
                                 boost::bind(&Client::handle_receive, this,
@@ -81,26 +101,10 @@ namespace rft
    {
       if (!error) {
          PLOG_INFO << "[Client] Received message";
-         PLOG_INFO << "\"" + std::string(&tmpMsgIn.body[3]) + "\"";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Client] Error on Receive: " + error.to_string();
       }
-   }
-   // ------------------------------------------------------------------------
-   void Client::decode_msg(size_t bytes_transferred)
-   {
-      auto& msg = tmpMsgIn.body;
-
-      ConnectionID connectionId = *reinterpret_cast<ConnectionID*>(&msg[0]);
-      uint8_t msgType = msg[2] >> 4;
-      uint8_t version = msg[2] & 0b00001111;
-      std::string payload(&msg[3]);
-
-      tmpMsgIn.header.type = static_cast<ServerMsgType>(msgType);
-      tmpMsgIn.header.size = bytes_transferred - sizeof(ConnectionID) - 1;
-
-      PLOG_INFO << "ConnectionID: " << connectionId << " - msgType: " << +msgType << " - version: " << +version << " - payload: " << payload;
    }
    // ------------------------------------------------------------------------
    void Client::enqueue_msg(size_t bytes_transferred)
@@ -108,22 +112,68 @@ namespace rft
       decode_msg(bytes_transferred);
       msgQueue.push_back(tmpMsgIn);
 
-      t.expires_at(t.expiry() + chrono::seconds(3));
-      t.async_wait(boost::bind(&Client::send_msg, this, tmpMsgOut));
+      receive_msg();
    }
    // ------------------------------------------------------------------------
-   void Client::create_echo_msg()
+   void Client::decode_msg(size_t bytes_transferred)
    {
-      // ConnectionID (not assigned yet)
-      tmpMsgOut.body[0] = 0;
-      tmpMsgOut.body[1] = 0;
-      // MsgType
-      tmpMsgOut.body[2] = ClientMsgType::FILE_REQUEST << 4;
-      // Version
-      tmpMsgOut.body[2] = tmpMsgOut.body[2] | 0b0001;
-      // Payload
-      std::string payload("Hello from client!");
-      std::memcpy(&tmpMsgOut.body[3], payload.data(), payload.size() + 1);
+      auto& msg = tmpMsgIn.body;
+
+      auto msgType = static_cast<ServerMsgType>(msg[0]);
+
+      tmpMsgIn.header.type = msgType;
+      tmpMsgIn.header.size = bytes_transferred;
+      tmpMsgIn.header.remote = remote_endpoint;
+   }
+   // ------------------------------------------------------------------------
+   void Client::process_msgs()
+   {
+      while (!done) {
+         msgQueue.wait();
+
+         while (!msgQueue.empty()) {
+            auto msg = msgQueue.pop_front();
+            dispatch_msg(msg);
+         }
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::dispatch_msg(Message<ServerMsgType>& msg)
+   {
+      switch (msg.header.type) {
+         case SERVER_INITIAL_RESPONSE:
+            handle_initial_response(msg);
+            break;
+         case PAYLOAD:
+         case SERVER_ERROR:
+            break;
+         // Ignore unknown packets
+         default:
+            return;
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_initial_response(Message<ServerMsgType>& msg)
+   {
+      hexdump(msg.body, msg.header.size);
+      uint32_t fileSize;
+
+      char* payload = &msg.body[1];
+      auto connectionId = static_cast<ConnectionID>(*payload);
+      payload += sizeof(ConnectionID);
+      std::memcpy(&fileSize, payload, sizeof(uint32_t));
+      payload += sizeof(uint32_t);
+      char sha256[SHA256_SIZE];
+      std::memcpy(sha256, payload, SHA256_SIZE);
+      payload += SHA256_SIZE;
+      std::string filename(payload);
+
+      PLOG_INFO << "[Client] Got Initial response for file: " << filename;
+
+      std::string dest = fileDest + "/" + filename;
+      fileTransfers.insert({connectionId, FileTransfer{dest, fileSize, sha256}});
+
+      // TODO: Send first Transmission Request
    }
    // ------------------------------------------------------------------------
 }// namespace rft
