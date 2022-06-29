@@ -16,8 +16,6 @@ namespace rft
       {
          friend class Client;
 
-//         FileTransfer() = default;
-
          FileTransfer(std::string& fileName, uint32_t fileSize, char sha256[SHA256_SIZE])
              : fileName(std::move(fileName)), fileSize(fileSize)
          {

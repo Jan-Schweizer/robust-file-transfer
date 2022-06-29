@@ -4,6 +4,8 @@
 #include <boost/asio.hpp>
 #include <cstdint>
 // ------------------------------------------------------------------------
+#define STREAM_TYPE(type) std::pair<type&, size_t>
+// ------------------------------------------------------------------------
 namespace rft
 {
    using namespace boost::asio;

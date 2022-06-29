@@ -156,17 +156,18 @@ namespace rft
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
    {
       hexdump(msg.body, msg.header.size);
-      uint32_t fileSize;
 
-      char* payload = &msg.body[1];
-      auto connectionId = static_cast<ConnectionID>(*payload);
-      payload += sizeof(ConnectionID);
-      std::memcpy(&fileSize, payload, sizeof(uint32_t));
-      payload += sizeof(uint32_t);
+      size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE);
+
+      ConnectionID connectionId;
+      uint32_t fileSize;
       char sha256[SHA256_SIZE];
-      std::memcpy(sha256, payload, SHA256_SIZE);
-      payload += SHA256_SIZE;
-      std::string filename(payload);
+      std::string filename(filenameSize, '\0');
+
+      msg >> STREAM_TYPE(char){*filename.data(), filenameSize};
+      msg >> STREAM_TYPE(char){*sha256, SHA256_SIZE};
+      msg >> STREAM_TYPE(uint32_t){fileSize, sizeof(uint32_t)};
+      msg >> STREAM_TYPE(ConnectionID){connectionId, sizeof(ConnectionID)};
 
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 

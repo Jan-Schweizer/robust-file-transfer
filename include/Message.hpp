@@ -30,7 +30,7 @@ namespace rft
    template<typename MsgType>
    struct MessageHeader {
       MsgType type;
-      uint16_t size{};
+      uint16_t size = 0;
       boost::asio::ip::udp::endpoint remote;
    };
    // ------------------------------------------------------------------------
@@ -38,6 +38,24 @@ namespace rft
    struct Message {
       MessageHeader<MsgType> header;
       char body[PACKET_SIZE]{'\0'};
+
+      /// Pushes T (stack-like) into the message
+      template<typename T>
+      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::pair<const T&, size_t> data)
+      {
+         std::memcpy(&msg.body[msg.header.size], &data.first, data.second);
+         msg.header.size += data.second;
+         return msg;
+      }
+
+      /// Pops data (stack-like) from the message into T
+      template<typename T>
+      friend Message<MsgType>& operator>>(Message<MsgType>& msg, const std::pair<T&, size_t> data)
+      {
+         msg.header.size -= data.second;
+         std::memcpy(&data.first, &msg.body[msg.header.size], data.second);
+         return msg;
+      }
    };
 }// namespace rft
 // ------------------------------------------------------------------------

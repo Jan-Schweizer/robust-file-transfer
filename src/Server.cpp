@@ -51,7 +51,6 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::send_msg_to_client(Message<ServerMsgType> msg, const ip::udp::endpoint& client)
    {
-      hexdump(msg.body, msg.header.size);
       socket.async_send_to(buffer(msg.body, msg.header.size), client,
                            boost::bind(&Server::handle_send, this,
                                        boost::asio::placeholders::error,
@@ -134,18 +133,16 @@ namespace rft
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
-      tmpMsgOut.header.size = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint32_t) + sha256.size() + filename.size() + 1;
+      tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
-      char* payload = tmpMsgOut.body;
-      *payload = ServerMsgType::SERVER_INITIAL_RESPONSE;
-      payload += sizeof(uint8_t);
-      std::memcpy(payload, &connectionId, sizeof(ConnectionID));
-      payload += sizeof(ConnectionID);
-      std::memcpy(payload, &fileSize, sizeof(uint32_t));
-      payload += sizeof(uint32_t);
-      std::memcpy(payload, sha256.data(), SHA256_SIZE);
-      payload += sha256.size();
-      std::memcpy(payload, filename.data(), filename.size() + 1);
+
+      tmpMsgOut << STREAM_TYPE(const ServerMsgType){ServerMsgType::SERVER_INITIAL_RESPONSE, sizeof(uint8_t)};
+      tmpMsgOut << STREAM_TYPE(const ConnectionID){connectionId, sizeof(ConnectionID)};
+      tmpMsgOut << STREAM_TYPE(const uint32_t){fileSize, sizeof(uint32_t)};
+      tmpMsgOut << STREAM_TYPE(const char){*sha256.data(), SHA256_SIZE};
+      tmpMsgOut << STREAM_TYPE(const char){*filename.data(), filename.size() + 1};
+
+      hexdump(tmpMsgOut.body, tmpMsgOut.header.size);
 
       send_msg_to_client(tmpMsgOut, msg.header.remote);
    }
