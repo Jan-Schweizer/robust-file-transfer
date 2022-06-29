@@ -4,7 +4,6 @@
 #include <boost/bind/bind.hpp>
 #include <filesystem>
 #include <fstream>
-#include <plog/Log.h>
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -136,11 +135,15 @@ namespace rft
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << STREAM_TYPE(const ServerMsgType){ServerMsgType::SERVER_INITIAL_RESPONSE, sizeof(uint8_t)};
-      tmpMsgOut << STREAM_TYPE(const ConnectionID){connectionId, sizeof(ConnectionID)};
-      tmpMsgOut << STREAM_TYPE(const uint32_t){fileSize, sizeof(uint32_t)};
-      tmpMsgOut << STREAM_TYPE(const char){*sha256.data(), SHA256_SIZE};
-      tmpMsgOut << STREAM_TYPE(const char){*filename.data(), filename.size() + 1};
+      tmpMsgOut << ServerMsgType::SERVER_INITIAL_RESPONSE;
+      tmpMsgOut << connectionId;
+      tmpMsgOut << fileSize;
+      tmpMsgOut << sha256;
+      tmpMsgOut << filename;
+
+      // Add the nullbyte
+      tmpMsgOut.body[tmpMsgOut.header.size] = '\0';
+      ++tmpMsgOut.header.size;
 
       hexdump(tmpMsgOut.body, tmpMsgOut.header.size);
 

@@ -16,17 +16,16 @@ namespace rft
       {
          friend class Client;
 
-         FileTransfer(std::string& fileName, uint32_t fileSize, char sha256[SHA256_SIZE])
-             : fileName(std::move(fileName)), fileSize(fileSize)
+         FileTransfer(std::string& fileName, uint32_t fileSize, std::string& sha256)
+             : fileName(std::move(fileName)), fileSize(fileSize), sha256(std::move(sha256))
          {
-            std::memcpy(this->sha256, sha256, SHA256_SIZE);
             file.open(this->fileName, std::ios::binary | std::ios::out | std::ios::app | std::ios::trunc);
          }
 
          std::string fileName;
          std::ofstream file;
          uint32_t fileSize;
-         char sha256[SHA256_SIZE]{};
+         std::string sha256;
          bool done = false;
       };
       // ------------------------------------------------------------------------

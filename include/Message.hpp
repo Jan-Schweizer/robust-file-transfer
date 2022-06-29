@@ -41,19 +41,33 @@ namespace rft
 
       /// Pushes T (stack-like) into the message
       template<typename T>
-      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::pair<const T&, size_t> data)
+      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const T& data)
       {
-         std::memcpy(&msg.body[msg.header.size], &data.first, data.second);
-         msg.header.size += data.second;
+         std::memcpy(&msg.body[msg.header.size], &data, sizeof(data));
+         msg.header.size += sizeof(data);
          return msg;
       }
 
+      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::string& data)
+      {
+         std::memcpy(&msg.body[msg.header.size], data.data(), data.size());
+         msg.header.size += data.size();
+         return msg;
+      }
+      // ------------------------------------------------------------------------
       /// Pops data (stack-like) from the message into T
       template<typename T>
-      friend Message<MsgType>& operator>>(Message<MsgType>& msg, const std::pair<T&, size_t> data)
+      friend Message<MsgType>& operator>>(Message<MsgType>& msg, T& data)
       {
-         msg.header.size -= data.second;
-         std::memcpy(&data.first, &msg.body[msg.header.size], data.second);
+         msg.header.size -= sizeof(data);
+         std::memcpy(&data, &msg.body[msg.header.size], sizeof(data));
+         return msg;
+      }
+
+      friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::string& data)
+      {
+         msg.header.size -= data.size();
+         std::memcpy(data.data(), &msg.body[msg.header.size], data.size());
          return msg;
       }
    };

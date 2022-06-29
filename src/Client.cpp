@@ -2,8 +2,6 @@
 #include "Client.hpp"
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
-#include <numeric>
-#include <plog/Log.h>
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -56,17 +54,19 @@ namespace rft
    void Client::request_file(std::string& filename)
    {
       tmpMsgOut.header.type = ClientMsgType::FILE_REQUEST;
-      tmpMsgOut.header.size = sizeof(uint8_t) + sizeof(ConnectionID) + filename.size() + 1;// 1 byte for \0
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
 
-      char* payload = tmpMsgOut.body;
-      *payload = ClientMsgType::FILE_REQUEST;
-      payload += sizeof(uint8_t);
-      // Initial ConnectionId is set to 0
-      *payload = 0;
-      ++payload;
-      *payload = 0;
-      ++payload;
-      std::memcpy(payload, filename.data(), filename.size() + 1);
+      // Initial ConnectionId for a file request is set to 0
+      ConnectionID connectionId = 0;
+
+      tmpMsgOut << ClientMsgType::FILE_REQUEST;
+      tmpMsgOut << connectionId;
+      tmpMsgOut << filename;
+
+      // Add the nullbyte
+      tmpMsgOut.body[tmpMsgOut.header.size] = '\0';
+      ++tmpMsgOut.header.size;
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
       send_msg(tmpMsgOut);
@@ -157,17 +157,20 @@ namespace rft
    {
       hexdump(msg.body, msg.header.size);
 
-      size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE);
+      size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE + 1);
 
       ConnectionID connectionId;
       uint32_t fileSize;
-      char sha256[SHA256_SIZE];
+      std::string sha256(SHA256_SIZE, '\0');
       std::string filename(filenameSize, '\0');
 
-      msg >> STREAM_TYPE(char){*filename.data(), filenameSize};
-      msg >> STREAM_TYPE(char){*sha256, SHA256_SIZE};
-      msg >> STREAM_TYPE(uint32_t){fileSize, sizeof(uint32_t)};
-      msg >> STREAM_TYPE(ConnectionID){connectionId, sizeof(ConnectionID)};
+      // Subtract the nullbyte
+      --msg.header.size;
+
+      msg >> filename;
+      msg >> sha256;
+      msg >> fileSize;
+      msg >> connectionId;
 
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 
