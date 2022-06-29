@@ -6,7 +6,7 @@
 namespace rft
 {
    // ------------------------------------------------------------------------
-   std::string compute_SHA256(std::string& filename)
+   void compute_SHA256(std::string& filename, unsigned char ret[SHA256_SIZE])
    {
       // each cycle processes about 1 MByte (divisible by 144 => improves Keccak/SHA3 performance)
       std::ifstream file(filename, std::ios::in | std::ios::binary);
@@ -24,7 +24,7 @@ namespace rft
       file.close();
       delete[] buffer;
 
-      return sha256.getHash();
+      sha256.getHash(ret);
    }
    // ------------------------------------------------------------------------
    void hexdump(const void* data, size_t size)

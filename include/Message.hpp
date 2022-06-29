@@ -50,8 +50,8 @@ namespace rft
 
       friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::string& data)
       {
-         std::memcpy(&msg.body[msg.header.size], data.data(), data.size());
-         msg.header.size += data.size();
+         std::memcpy(&msg.body[msg.header.size], data.data(), data.size() + 1);
+         msg.header.size += data.size() + 1;
          return msg;
       }
       // ------------------------------------------------------------------------
@@ -66,8 +66,8 @@ namespace rft
 
       friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::string& data)
       {
-         msg.header.size -= data.size();
-         std::memcpy(data.data(), &msg.body[msg.header.size], data.size());
+         msg.header.size -= data.size() + 1;
+         std::memcpy(data.data(), &msg.body[msg.header.size], data.size() + 1);
          return msg;
       }
    };

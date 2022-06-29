@@ -64,10 +64,6 @@ namespace rft
       tmpMsgOut << connectionId;
       tmpMsgOut << filename;
 
-      // Add the nullbyte
-      tmpMsgOut.body[tmpMsgOut.header.size] = '\0';
-      ++tmpMsgOut.header.size;
-
       PLOG_INFO << "[Client] Requesting file: " << filename;
       send_msg(tmpMsgOut);
    }
@@ -161,11 +157,8 @@ namespace rft
 
       ConnectionID connectionId;
       uint32_t fileSize;
-      std::string sha256(SHA256_SIZE, '\0');
+      unsigned char sha256[SHA256_SIZE];
       std::string filename(filenameSize, '\0');
-
-      // Subtract the nullbyte
-      --msg.header.size;
 
       msg >> filename;
       msg >> sha256;

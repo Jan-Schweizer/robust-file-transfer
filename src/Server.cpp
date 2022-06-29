@@ -114,7 +114,10 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::handle_file_request(Message<ClientMsgType>& msg)
    {
-      std::string filename(&msg.body[3]);
+      uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + 1);
+      std::string filename(filenameSize, '\0');
+      msg >> filename;
+
       PLOG_INFO << "[Server] Client requesting file: " << filename;
 
       std::ifstream file(filename, std::ios::in | std::ios::binary);
@@ -126,9 +129,10 @@ namespace rft
 
       ConnectionID connectionId = connectionIdPool++;
       uint32_t fileSize = std::filesystem::file_size(filename);
-      std::string sha256 = compute_SHA256(filename);
+      unsigned char sha256[SHA256_SIZE];
+      compute_SHA256(filename, sha256);
 
-      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize}});
+      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
@@ -140,10 +144,6 @@ namespace rft
       tmpMsgOut << fileSize;
       tmpMsgOut << sha256;
       tmpMsgOut << filename;
-
-      // Add the nullbyte
-      tmpMsgOut.body[tmpMsgOut.header.size] = '\0';
-      ++tmpMsgOut.header.size;
 
       hexdump(tmpMsgOut.body, tmpMsgOut.header.size);
 

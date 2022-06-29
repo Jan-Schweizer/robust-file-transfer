@@ -1,14 +1,15 @@
 #ifndef ROBUST_FILE_TRANSFER_UTIL_HPP
 #define ROBUST_FILE_TRANSFER_UTIL_HPP
 // ------------------------------------------------------------------------
+#include "common.hpp"
 #include <string>
 // ------------------------------------------------------------------------
 namespace rft
 {
-   std::string compute_SHA256(std::string& filename);
+   void compute_SHA256(std::string& filename, unsigned char ret[SHA256_SIZE]);
 
    // https://gist.github.com/ccbrown/9722406
    void hexdump(const void* data, size_t size);
-}
+}// namespace rft
 // ------------------------------------------------------------------------
 #endif//ROBUST_FILE_TRANSFER_UTIL_HPP
