@@ -13,6 +13,7 @@ namespace rft
 
    const uint16_t PACKET_SIZE = 512;
    const uint8_t SHA256_SIZE = 32;
+   const uint8_t MAX_WINDOW_SIZE = 64;
 }// namespace rft
 // ------------------------------------------------------------------------
 #endif//ROBUST_FILE_TRANSFER_COMMON_HPP

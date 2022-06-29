@@ -114,9 +114,12 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::handle_file_request(Message<ClientMsgType>& msg)
    {
-      uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + 1);
+      uint8_t maxWindowSize;
+      uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + sizeof(MAX_WINDOW_SIZE) + 1);
       std::string filename(filenameSize, '\0');
+
       msg >> filename;
+      msg >> maxWindowSize;
 
       PLOG_INFO << "[Server] Client requesting file: " << filename;
 
@@ -132,7 +135,7 @@ namespace rft
       unsigned char sha256[SHA256_SIZE];
       compute_SHA256(filename, sha256);
 
-      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256}});
+      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256, maxWindowSize}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;

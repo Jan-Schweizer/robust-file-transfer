@@ -62,6 +62,7 @@ namespace rft
 
       tmpMsgOut << ClientMsgType::FILE_REQUEST;
       tmpMsgOut << connectionId;
+      tmpMsgOut << MAX_WINDOW_SIZE;
       tmpMsgOut << filename;
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
