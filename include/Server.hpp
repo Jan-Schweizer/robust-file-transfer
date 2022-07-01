@@ -17,7 +17,7 @@ namespace rft
       {
          friend class Server;
 
-         FileTransfer(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], uint8_t maxWindowSize)
+         FileTransfer(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], uint16_t maxWindowSize)
              : client(std::move(client)), file(std::move(file)), fileSize(fileSize), maxWindowSize(maxWindowSize)
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
@@ -27,7 +27,7 @@ namespace rft
          std::ifstream file;
          uint32_t fileSize;
          unsigned char sha256[SHA256_SIZE]{'\0'};
-         uint8_t maxWindowSize;
+         uint16_t maxWindowSize;
       };
       // ------------------------------------------------------------------------
 

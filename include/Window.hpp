@@ -1,0 +1,8 @@
+//
+// Created by jan on 7/1/22.
+//
+
+#ifndef ROBUST_FILE_TRANSFER_WINDOW_HPP
+#define ROBUST_FILE_TRANSFER_WINDOW_HPP
+
+#endif//ROBUST_FILE_TRANSFER_WINDOW_HPP

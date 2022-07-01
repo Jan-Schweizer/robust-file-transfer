@@ -114,7 +114,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::handle_file_request(Message<ClientMsgType>& msg)
    {
-      uint8_t maxWindowSize;
+      uint16_t maxWindowSize;
       uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + sizeof(MAX_WINDOW_SIZE) + 1);
       std::string filename(filenameSize, '\0');
 
