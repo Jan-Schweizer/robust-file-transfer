@@ -71,7 +71,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::send_msg(Message<ClientMsgType> msg)
    {
-      socket.async_send_to(buffer(msg.body, msg.header.size), server_endpoint,
+      socket.async_send_to(buffer(msg.packet, msg.header.size), server_endpoint,
                            boost::bind(&Client::handle_send, this,
                                        boost::asio::placeholders::error,
                                        boost::asio::placeholders::bytes_transferred));
@@ -88,7 +88,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::receive_msg()
    {
-      socket.async_receive_from(buffer(tmpMsgIn.body, PACKET_SIZE), remote_endpoint,
+      socket.async_receive_from(buffer(tmpMsgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
                                 boost::bind(&Client::handle_receive, this,
                                             boost::asio::placeholders::error,
                                             boost::asio::placeholders::bytes_transferred));
@@ -114,7 +114,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::decode_msg(size_t bytes_transferred)
    {
-      auto& msg = tmpMsgIn.body;
+      auto& msg = tmpMsgIn.packet;
 
       auto msgType = static_cast<ServerMsgType>(msg[0]);
 
@@ -152,7 +152,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
    {
-      hexdump(msg.body, msg.header.size);
+      hexdump(msg.packet, msg.header.size);
 
       size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE + 1);
 

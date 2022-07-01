@@ -32,7 +32,7 @@ namespace rft
    void Server::receive_msg()
    {
       socket.async_receive_from(
-          buffer(tmpMsgIn.body, PACKET_SIZE), remote_endpoint,
+          buffer(tmpMsgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
           boost::bind(&Server::handle_receive, this,
                       boost::asio::placeholders::error,
                       boost::asio::placeholders::bytes_transferred));
@@ -50,7 +50,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::send_msg_to_client(Message<ServerMsgType> msg, const ip::udp::endpoint& client)
    {
-      socket.async_send_to(buffer(msg.body, msg.header.size), client,
+      socket.async_send_to(buffer(msg.packet, msg.header.size), client,
                            boost::bind(&Server::handle_send, this,
                                        boost::asio::placeholders::error,
                                        boost::asio::placeholders::bytes_transferred));
@@ -75,7 +75,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::decode_msg(size_t bytes_transferred)
    {
-      auto& msg = tmpMsgIn.body;
+      auto& msg = tmpMsgIn.packet;
 
       auto msgType = static_cast<ClientMsgType>(msg[0]);
 
@@ -148,7 +148,7 @@ namespace rft
       tmpMsgOut << sha256;
       tmpMsgOut << filename;
 
-      hexdump(tmpMsgOut.body, tmpMsgOut.header.size);
+      hexdump(tmpMsgOut.packet, tmpMsgOut.header.size);
 
       send_msg_to_client(tmpMsgOut, msg.header.remote);
    }
