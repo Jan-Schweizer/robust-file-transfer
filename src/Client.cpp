@@ -37,8 +37,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::stop()
    {
-      if (thread_context.joinable()) thread_context.join();
       io_context.stop();
+      if (thread_context.joinable()) thread_context.join();
       PLOG_INFO << "[Client] Disconnected!";
    }
    // ------------------------------------------------------------------------
@@ -142,6 +142,7 @@ namespace rft
             handle_initial_response(msg);
             break;
          case PAYLOAD:
+            handle_payload_packet(msg);
          case SERVER_ERROR:
             break;
          // Ignore unknown packets
@@ -152,8 +153,6 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
    {
-      hexdump(msg.packet, msg.header.size);
-
       size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE + 1);
 
       ConnectionID connectionId;
@@ -169,9 +168,87 @@ namespace rft
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 
       std::string dest = fileDest + "/" + filename;
-      fileTransfers.insert({connectionId, FileTransfer{dest, fileSize, sha256}});
+      Window window{MAX_WINDOW_SIZE};
+      fileTransfers.insert({connectionId, FileTransfer{dest, fileSize, sha256, std::move(window)}});
 
-      // TODO: Send first Transmission Request
+      request_transmission(connectionId);
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_payload_packet(Message<ServerMsgType>& msg)
+   {
+      uint16_t chunkSize = msg.header.size - (PAYLOAD_META_DATA_SIZE);
+
+      ConnectionID connectionId;
+      uint8_t windowId;
+      uint16_t currentWindowSize;
+      uint16_t sequenceNumber;
+      std::vector<char> chunk(chunkSize);
+
+      msg >> chunk;
+      msg >> sequenceNumber;
+      msg >> currentWindowSize;
+      msg >> windowId;
+      msg >> connectionId;
+
+      auto search = fileTransfers.find(connectionId);
+      if (search == fileTransfers.end()) {
+         // Ignore unknown connection id
+         return;
+      }
+      auto& ft = search->second;
+
+      if (windowId != ft.window.id) {
+         // Ignore delayed packets
+         return;
+      }
+
+      ft.window.store_chunk(chunk, sequenceNumber);
+      ++ft.chunksReceivedInWindow;
+
+      if (ft.chunksReceivedInWindow == currentWindowSize) {
+         uint32_t bytesWritten = 0;
+         for (size_t i = 0; i < currentWindowSize; ++i) {
+            uint32_t bytes = ft.window.chunks[i].size();
+            ft.file.write(ft.window.chunks[i].data(), bytes);
+            bytesWritten += bytes;
+         }
+         ft.bytesWritten += bytesWritten;
+         ft.chunksWritten += currentWindowSize;
+         ft.file.flush();
+
+         PLOG_INFO << "[Client] Writen " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
+                   << "(" << bytesWritten << "B)"
+                   << " to disk";
+
+         if (ft.bytesWritten == ft.fileSize) {
+            PLOG_INFO << "[Client] Transferred file " << ft.fileName << " successfully";
+            ft.done = true;
+            done = std::all_of(fileTransfers.begin(), fileTransfers.end(), [](auto& ft) { return ft.second.done; });
+            return;
+         }
+
+         ++ft.window.id;
+         request_transmission(connectionId);
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::request_transmission(ConnectionID connectionId)
+   {
+      tmpMsgOut.header.type = ClientMsgType::TRANSMISSION_REQUEST;
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+      auto& ft = fileTransfers.at(connectionId);
+      tmpMsgOut << ClientMsgType::TRANSMISSION_REQUEST;
+      tmpMsgOut << connectionId;
+      tmpMsgOut << ft.window.id;
+      tmpMsgOut << ft.chunksWritten;
+
+      ft.chunksReceivedInWindow = 0;
+
+      PLOG_INFO << "[Client] Requesting chunks at index: " << ft.chunksWritten << " for file " << ft.fileName;
+
+      send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
 }// namespace rft

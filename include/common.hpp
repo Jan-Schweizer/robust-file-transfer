@@ -13,11 +13,13 @@ namespace rft
 
    /// Size of a data chunk from the file
    const uint16_t CHUNK_SIZE = 512;
+   /// Size of the Server Payload Packet meta data
+   const uint16_t PAYLOAD_META_DATA_SIZE = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
    /// Maximum size of a packet (Server Payload Packet aka Server Data Response)
-   const uint16_t MAX_PACKET_SIZE = CHUNK_SIZE + sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
+   const uint16_t MAX_PACKET_SIZE = CHUNK_SIZE + PAYLOAD_META_DATA_SIZE;
    /// Size of the SHA256 hash
    const uint8_t SHA256_SIZE = 32;
-   /// Maximum receiving window size of a client
+   /// Maximum receiving chunk size of a client
    const uint16_t MAX_WINDOW_SIZE = 64;
 }// namespace rft
 // ------------------------------------------------------------------------

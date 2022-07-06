@@ -48,10 +48,19 @@ namespace rft
          return msg;
       }
 
+      // Special overload for std::string
       friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::string& data)
       {
          std::memcpy(&msg.packet[msg.header.size], data.data(), data.size() + 1);
          msg.header.size += data.size() + 1;
+         return msg;
+      }
+
+      // Special overload for std::vector<char>
+      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::vector<char>& chunk)
+      {
+         std::memcpy(&msg.packet[msg.header.size], chunk.data(), chunk.size());
+         msg.header.size += chunk.size();
          return msg;
       }
       // ------------------------------------------------------------------------
@@ -64,10 +73,19 @@ namespace rft
          return msg;
       }
 
+      // Special overload for std::string
       friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::string& data)
       {
          msg.header.size -= data.size() + 1;
          std::memcpy(data.data(), &msg.packet[msg.header.size], data.size() + 1);
+         return msg;
+      }
+
+      // Special overload for std::vector<char>
+      friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::vector<char>& chunk)
+      {
+         msg.header.size -= chunk.size();
+         std::memcpy(chunk.data(), &msg.packet[msg.header.size], chunk.size());
          return msg;
       }
    };

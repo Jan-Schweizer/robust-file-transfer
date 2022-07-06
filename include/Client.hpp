@@ -2,6 +2,7 @@
 #define ROBUST_FILE_TRANSFER_CLIENT_HPP
 // ------------------------------------------------------------------------
 #include "MessageQueue.hpp"
+#include "Window.hpp"
 #include "common.hpp"
 #include <fstream>
 #include <unordered_map>
@@ -16,17 +17,26 @@ namespace rft
       {
          friend class Client;
 
-         FileTransfer(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE])
-             : fileName(std::move(fileName)), fileSize(fileSize)
+         FileTransfer(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window)
+             : fileName(std::move(fileName)), fileSize(fileSize), window(std::move(window))
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
-            file.open(this->fileName, std::ios::binary | std::ios::out | std::ios::app | std::ios::trunc);
+            file.open(this->fileName, std::ios::binary | std::ios::trunc);
+            if (!file) {
+               PLOG_ERROR << "[Client] Could not open file for writing";
+               done = true;
+               // TODO: find a way to communicate this error and terminate file transfer
+            }
          }
 
          std::string fileName;
          std::ofstream file;
          uint32_t fileSize;
+         uint32_t bytesWritten = 0;
          unsigned char sha256[SHA256_SIZE]{'\0'};
+         Window window;
+         uint32_t chunksWritten = 0;
+         uint16_t chunksReceivedInWindow = 0;
          bool done = false;
       };
       // ------------------------------------------------------------------------
@@ -60,6 +70,9 @@ namespace rft
       void decode_msg(size_t bytes_transferred);
 
       void handle_initial_response(Message<ServerMsgType>& msg);
+      void handle_payload_packet(Message<ServerMsgType>& msg);
+
+      void request_transmission(ConnectionID connectionId);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;

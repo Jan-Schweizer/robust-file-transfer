@@ -24,8 +24,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::stop()
    {
-      if (thread_context.joinable()) thread_context.join();
       io_context.stop();
+      if (thread_context.joinable()) thread_context.join();
       PLOG_INFO << "[Server] Stopped!";
    }
    // ------------------------------------------------------------------------
@@ -103,6 +103,7 @@ namespace rft
             handle_file_request(msg);
             break;
          case TRANSMISSION_REQUEST:
+            handle_transmission_request(msg);
          case RETRANSMISSION_REQUEST:
          case CLIENT_ERROR:
             break;
@@ -134,8 +135,11 @@ namespace rft
       uint32_t fileSize = std::filesystem::file_size(filename);
       unsigned char sha256[SHA256_SIZE];
       compute_SHA256(filename, sha256);
+      Window window(maxWindowSize);
+      // The first window id is 0. Therefore, the initial id is set to 0 - 1
+      window.id = 0 - 1;
 
-      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256, maxWindowSize}});
+      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256, maxWindowSize, std::move(window)}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
@@ -148,9 +152,61 @@ namespace rft
       tmpMsgOut << sha256;
       tmpMsgOut << filename;
 
-      hexdump(tmpMsgOut.packet, tmpMsgOut.header.size);
-
       send_msg_to_client(tmpMsgOut, msg.header.remote);
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_transmission_request(Message<ClientMsgType>& msg)
+   {
+      ConnectionID connectionId;
+      uint8_t windowId;
+      uint32_t chunkIdx;
+
+      msg >> chunkIdx;
+      msg >> windowId;
+      msg >> connectionId;
+
+      auto search = fileTransfers.find(connectionId);
+      if (search == fileTransfers.end()) {
+         // TODO: resume connection (remember to advance file idx pointer) & logging
+         return;
+      }
+      auto& ft = search->second;
+
+      if (windowId != static_cast<uint8_t>(ft.window.id + 1)) {
+         // TODO: handle duplicate & logging
+         return;
+      }
+
+      ft.window.id = windowId;
+      ft.chunksWritten = chunkIdx;
+
+      PLOG_INFO << "[Server] Transmission request for connection ID " << connectionId << " at chunk index " << ft.chunksWritten;
+
+      tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+      for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
+         // read chunk from file
+         char buffer[CHUNK_SIZE];
+         ft.file.read(buffer, CHUNK_SIZE);
+         const size_t numBytesRead = ft.file.gcount();
+         std::vector<char> chunk(std::begin(buffer), std::begin(buffer) + numBytesRead);
+
+         tmpMsgOut.header.size = 0;
+
+         tmpMsgOut << ServerMsgType::PAYLOAD;
+         tmpMsgOut << connectionId;
+         tmpMsgOut << ft.window.id;
+         tmpMsgOut << ft.window.currentSize;
+         tmpMsgOut << i;
+         tmpMsgOut << chunk;
+
+         ft.window.store_chunk(chunk, i);
+
+         send_msg_to_client(tmpMsgOut, msg.header.remote);
+      }
+
+      // TODO: update congestion control information
    }
    // ------------------------------------------------------------------------
 }// namespace rft
