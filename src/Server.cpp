@@ -1,5 +1,6 @@
 // ------------------------------------------------------------------------
 #include "Server.hpp"
+#include "Bitfield.hpp"
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
 #include <filesystem>
@@ -105,6 +106,7 @@ namespace rft
          case TRANSMISSION_REQUEST:
             handle_transmission_request(msg);
          case RETRANSMISSION_REQUEST:
+            handle_retransmission_request(msg);
          case CLIENT_ERROR:
             break;
          // Ignore unknown packets
@@ -180,7 +182,7 @@ namespace rft
       ft.window.id = windowId;
       ft.chunksWritten = chunkIdx;
 
-      PLOG_INFO << "[Server] Transmission request for connection ID " << connectionId << " at chunk index " << ft.chunksWritten;
+      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << ft.chunksWritten;
 
       tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
@@ -204,6 +206,40 @@ namespace rft
          ft.window.store_chunk(chunk, i);
 
          send_msg_to_client(tmpMsgOut, msg.header.remote);
+      }
+
+      // TODO: update congestion control information
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_retransmission_request(Message<ClientMsgType>& msg)
+   {
+      uint16_t payloadSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + sizeof(uint8_t));
+
+      ConnectionID connectionId;
+      uint8_t windowId;
+      std::vector<unsigned char> payload(payloadSize);
+
+      msg >> payload;
+      msg >> windowId;
+      msg >> connectionId;
+
+      PLOG_INFO << "[Server] Received Retransmission Request for connection ID " << connectionId;
+
+      auto& ft = fileTransfers.at(connectionId);
+      Bitfield bitfield(ft.window.currentSize);
+      bitfield.from(payload.data());
+
+      for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
+         if (bitfield[i]) {
+            tmpMsgOut << ServerMsgType::PAYLOAD;
+            tmpMsgOut << connectionId;
+            tmpMsgOut << ft.window.id;
+            tmpMsgOut << ft.window.currentSize;
+            tmpMsgOut << i;
+            tmpMsgOut << ft.window.chunks[i];
+
+            send_msg_to_client(tmpMsgOut, msg.header.remote);
+         }
       }
 
       // TODO: update congestion control information

@@ -73,6 +73,7 @@ namespace rft
       void handle_payload_packet(Message<ServerMsgType>& msg);
 
       void request_transmission(ConnectionID connectionId);
+      void request_retransmission(ConnectionID connectionId);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;

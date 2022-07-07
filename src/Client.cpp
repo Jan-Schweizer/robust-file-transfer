@@ -1,5 +1,6 @@
 // ------------------------------------------------------------------------
 #include "Client.hpp"
+#include "Bitfield.hpp"
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
 // ------------------------------------------------------------------------
@@ -247,6 +248,28 @@ namespace rft
       ft.chunksReceivedInWindow = 0;
 
       PLOG_INFO << "[Client] Requesting chunks at index: " << ft.chunksWritten << " for file " << ft.fileName;
+
+      send_msg(tmpMsgOut);
+   }
+   // ------------------------------------------------------------------------
+   void Client::request_retransmission(ConnectionID connectionId)
+   {
+      tmpMsgOut.header.type = ClientMsgType::RETRANSMISSION_REQUEST;
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+
+      auto& ft = fileTransfers.at(connectionId);
+
+      Bitfield bitfield(ft.window.currentSize);
+      bitfield.from(ft.window.sequenceNumbers);
+
+      tmpMsgOut << ClientMsgType::RETRANSMISSION_REQUEST;
+      tmpMsgOut << connectionId;
+      tmpMsgOut << ft.window.id;
+      tmpMsgOut << bitfield.bitfield;
+
+      PLOG_INFO << "[Client] Requesting retransmission for connection ID " << connectionId;
 
       send_msg(tmpMsgOut);
    }

@@ -59,6 +59,7 @@ namespace rft
 
       void handle_file_request(Message<ClientMsgType>& msg);
       void handle_transmission_request(Message<ClientMsgType>& msg);
+      void handle_retransmission_request(Message<ClientMsgType>& msg);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
