@@ -37,7 +37,7 @@ namespace rft
    template<typename MsgType>
    struct Message {
       MessageHeader<MsgType> header;
-      char packet[MAX_PACKET_SIZE]{'\0'};
+      unsigned char packet[MAX_PACKET_SIZE]{'\0'};
 
       /// Pushes T (stack-like) into the message
       template<typename T>
@@ -56,8 +56,8 @@ namespace rft
          return msg;
       }
 
-      // Special overload for std::vector<char>
-      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::vector<char>& chunk)
+      // Special overload for std::vector<unsigned char>
+      friend Message<MsgType>& operator<<(Message<MsgType>& msg, const std::vector<unsigned char>& chunk)
       {
          std::memcpy(&msg.packet[msg.header.size], chunk.data(), chunk.size());
          msg.header.size += chunk.size();
@@ -81,8 +81,8 @@ namespace rft
          return msg;
       }
 
-      // Special overload for std::vector<char>
-      friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::vector<char>& chunk)
+      // Special overload for std::vector<unsigned char>
+      friend Message<MsgType>& operator>>(Message<MsgType>& msg, std::vector<unsigned char>& chunk)
       {
          msg.header.size -= chunk.size();
          std::memcpy(chunk.data(), &msg.packet[msg.header.size], chunk.size());

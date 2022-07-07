@@ -182,7 +182,7 @@ namespace rft
       uint8_t windowId;
       uint16_t currentWindowSize;
       uint16_t sequenceNumber;
-      std::vector<char> chunk(chunkSize);
+      std::vector<unsigned char> chunk(chunkSize);
 
       msg >> chunk;
       msg >> sequenceNumber;
@@ -209,7 +209,7 @@ namespace rft
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = ft.window.chunks[i].size();
-            ft.file.write(ft.window.chunks[i].data(), bytes);
+            ft.file.write(reinterpret_cast<char*>(ft.window.chunks[i].data()), bytes);
             bytesWritten += bytes;
          }
          ft.bytesWritten += bytesWritten;

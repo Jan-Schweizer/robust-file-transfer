@@ -187,10 +187,10 @@ namespace rft
 
       for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
          // read chunk from file
-         char buffer[CHUNK_SIZE];
-         ft.file.read(buffer, CHUNK_SIZE);
+         unsigned char buffer[CHUNK_SIZE];
+         ft.file.read(reinterpret_cast<char*>(buffer), CHUNK_SIZE);
          const size_t numBytesRead = ft.file.gcount();
-         std::vector<char> chunk(std::begin(buffer), std::begin(buffer) + numBytesRead);
+         std::vector<unsigned char> chunk(std::begin(buffer), std::begin(buffer) + numBytesRead);
 
          tmpMsgOut.header.size = 0;
 

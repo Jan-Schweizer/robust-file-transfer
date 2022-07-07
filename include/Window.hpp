@@ -13,13 +13,13 @@ namespace rft
          sequenceNumbers.resize(maxSize, false);
       }
 
-      std::vector<std::vector<char>> chunks;
+      std::vector<std::vector<unsigned char>> chunks;
       uint8_t id = 0;
       uint16_t maxSize;
       uint16_t currentSize = 1;
       std::vector<bool> sequenceNumbers;
 
-      void store_chunk(std::vector<char>& chunk, const uint16_t sequenceNumber)
+      void store_chunk(std::vector<unsigned char>& chunk, const uint16_t sequenceNumber)
       {
          chunks[sequenceNumber] = std::move(chunk);
          sequenceNumbers[sequenceNumber] = true;
