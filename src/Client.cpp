@@ -144,6 +144,7 @@ namespace rft
             break;
          case PAYLOAD:
             handle_payload_packet(msg);
+            break;
          case SERVER_ERROR:
             break;
          // Ignore unknown packets
@@ -204,9 +205,10 @@ namespace rft
       }
 
       ft.window.store_chunk(chunk, sequenceNumber);
+      ft.window.currentSize = currentWindowSize;
       ++ft.chunksReceivedInWindow;
 
-      if (ft.chunksReceivedInWindow == currentWindowSize) {
+      if (ft.chunksReceivedInWindow == ft.window.currentSize) {
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = ft.window.chunks[i].size();
@@ -217,11 +219,18 @@ namespace rft
          ft.chunksWritten += currentWindowSize;
          ft.file.flush();
 
-         PLOG_INFO << "[Client] Writen " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
+         PLOG_INFO << "[Client] Written " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
                    << "(" << bytesWritten << "B)"
                    << " to disk";
 
          if (ft.bytesWritten == ft.fileSize) {
+            unsigned char sha256[SHA256_SIZE];
+            compute_SHA256(ft.fileName, sha256);
+            if (std::strncmp(reinterpret_cast<char*>(ft.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
+               PLOG_ERROR << "[Client] File " << ft.fileName << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
+               return;
+            }
+
             PLOG_INFO << "[Client] Transferred file " << ft.fileName << " successfully";
             ft.done = true;
             done = std::all_of(fileTransfers.begin(), fileTransfers.end(), [](auto& ft) { return ft.second.done; });

@@ -105,8 +105,10 @@ namespace rft
             break;
          case TRANSMISSION_REQUEST:
             handle_transmission_request(msg);
+            break;
          case RETRANSMISSION_REQUEST:
             handle_retransmission_request(msg);
+            break;
          case CLIENT_ERROR:
             break;
          // Ignore unknown packets
@@ -194,6 +196,11 @@ namespace rft
          const size_t numBytesRead = ft.file.gcount();
          std::vector<unsigned char> chunk(std::begin(buffer), std::begin(buffer) + numBytesRead);
 
+         // Read the last chunk of the file
+         if (numBytesRead < CHUNK_SIZE) {
+            ft.window.currentSize = i + 1;
+         }
+
          tmpMsgOut.header.size = 0;
 
          tmpMsgOut << ServerMsgType::PAYLOAD;
@@ -229,8 +236,13 @@ namespace rft
       Bitfield bitfield(ft.window.currentSize);
       bitfield.from(payload.data());
 
+      tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
       for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
-         if (bitfield[i]) {
+         if (!bitfield[i]) {
+            tmpMsgOut.header.size = 0;
+
             tmpMsgOut << ServerMsgType::PAYLOAD;
             tmpMsgOut << connectionId;
             tmpMsgOut << ft.window.id;
