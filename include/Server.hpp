@@ -14,20 +14,17 @@ namespace rft
    class Server
    {
       // ------------------------------------------------------------------------
-      class FileTransfer
+      class Connection
       {
          friend class Server;
 
-         FileTransfer(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], uint16_t maxWindowSize, Window window)
+         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, uint16_t maxWindowSize, Window window)
              : client(std::move(client)), file(std::move(file)), fileSize(fileSize), maxWindowSize(maxWindowSize), window(std::move(window))
-         {
-            std::memcpy(this->sha256, sha256, SHA256_SIZE);
-         }
+         { }
 
          boost::asio::ip::udp::endpoint client;
          std::ifstream file;
          uint32_t fileSize;
-         unsigned char sha256[SHA256_SIZE]{'\0'};
          uint16_t maxWindowSize;
          Window window;
          uint32_t chunksWritten = 0;
@@ -67,7 +64,7 @@ namespace rft
       size_t port;
       boost::asio::ip::udp::endpoint remote_endpoint;
 
-      std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
+      std::unordered_map<ConnectionID, Connection> connections;
       ConnectionID connectionIdPool = 0;
 
       Message<ClientMsgType> tmpMsgIn{};

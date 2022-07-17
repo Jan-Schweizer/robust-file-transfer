@@ -171,7 +171,7 @@ namespace rft
 
       std::string dest = fileDest + "/" + filename;
       Window window{MAX_WINDOW_SIZE};
-      fileTransfers.insert({connectionId, FileTransfer{dest, fileSize, sha256, std::move(window)}});
+      connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window)}});
 
       request_transmission(connectionId);
    }
@@ -192,52 +192,52 @@ namespace rft
       msg >> windowId;
       msg >> connectionId;
 
-      auto search = fileTransfers.find(connectionId);
-      if (search == fileTransfers.end()) {
+      auto search = connections.find(connectionId);
+      if (search == connections.end()) {
          // Ignore unknown connection id
          return;
       }
-      auto& ft = search->second;
+      auto& conn = search->second;
 
-      if (windowId != ft.window.id) {
+      if (windowId != conn.window.id) {
          // Ignore delayed packets
          return;
       }
 
-      ft.window.store_chunk(chunk, sequenceNumber);
-      ft.window.currentSize = currentWindowSize;
-      ++ft.chunksReceivedInWindow;
+      conn.window.store_chunk(chunk, sequenceNumber);
+      conn.window.currentSize = currentWindowSize;
+      ++conn.chunksReceivedInWindow;
 
-      if (ft.chunksReceivedInWindow == ft.window.currentSize) {
+      if (conn.chunksReceivedInWindow == conn.window.currentSize) {
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
-            uint32_t bytes = ft.window.chunks[i].size();
-            ft.file.write(reinterpret_cast<char*>(ft.window.chunks[i].data()), bytes);
+            uint32_t bytes = conn.window.chunks[i].size();
+            conn.file.write(reinterpret_cast<char*>(conn.window.chunks[i].data()), bytes);
             bytesWritten += bytes;
          }
-         ft.bytesWritten += bytesWritten;
-         ft.chunksWritten += currentWindowSize;
-         ft.file.flush();
+         conn.bytesWritten += bytesWritten;
+         conn.chunksWritten += currentWindowSize;
+         conn.file.flush();
 
          PLOG_INFO << "[Client] Written " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
                    << "(" << bytesWritten << "B)"
                    << " to disk";
 
-         if (ft.bytesWritten == ft.fileSize) {
+         if (conn.bytesWritten == conn.fileSize) {
             unsigned char sha256[SHA256_SIZE];
-            compute_SHA256(ft.fileName, sha256);
-            if (std::strncmp(reinterpret_cast<char*>(ft.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
-               PLOG_ERROR << "[Client] File " << ft.fileName << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
+            compute_SHA256(conn.fileName, sha256);
+            if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
+               PLOG_ERROR << "[Client] File " << conn.fileName << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
                return;
             }
 
-            PLOG_INFO << "[Client] Transferred file " << ft.fileName << " successfully";
-            ft.done = true;
-            done = std::all_of(fileTransfers.begin(), fileTransfers.end(), [](auto& ft) { return ft.second.done; });
+            PLOG_INFO << "[Client] Transferred file " << conn.fileName << " successfully";
+            connections.erase(connectionId);
+            done = connections.empty();
             return;
          }
 
-         ++ft.window.id;
+         ++conn.window.id;
          request_transmission(connectionId);
       }
    }
@@ -248,15 +248,15 @@ namespace rft
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      auto& ft = fileTransfers.at(connectionId);
+      auto& conn = connections.at(connectionId);
       tmpMsgOut << ClientMsgType::TRANSMISSION_REQUEST;
       tmpMsgOut << connectionId;
-      tmpMsgOut << ft.window.id;
-      tmpMsgOut << ft.chunksWritten;
+      tmpMsgOut << conn.window.id;
+      tmpMsgOut << conn.chunksWritten;
 
-      ft.chunksReceivedInWindow = 0;
+      conn.chunksReceivedInWindow = 0;
 
-      PLOG_INFO << "[Client] Requesting chunks at index: " << ft.chunksWritten << " for file " << ft.fileName;
+      PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.fileName;
 
       send_msg(tmpMsgOut);
    }
@@ -268,14 +268,14 @@ namespace rft
       tmpMsgOut.header.remote = socket.local_endpoint();
 
 
-      auto& ft = fileTransfers.at(connectionId);
+      auto& conn = connections.at(connectionId);
 
-      Bitfield bitfield(ft.window.currentSize);
-      bitfield.from(ft.window.sequenceNumbers);
+      Bitfield bitfield(conn.window.currentSize);
+      bitfield.from(conn.window.sequenceNumbers);
 
       tmpMsgOut << ClientMsgType::RETRANSMISSION_REQUEST;
       tmpMsgOut << connectionId;
-      tmpMsgOut << ft.window.id;
+      tmpMsgOut << conn.window.id;
       tmpMsgOut << bitfield.bitfield;
 
       PLOG_INFO << "[Client] Requesting retransmission for connection ID " << connectionId;

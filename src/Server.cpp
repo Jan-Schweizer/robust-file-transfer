@@ -143,7 +143,7 @@ namespace rft
       // The first window id is 0. Therefore, the initial id is set to 0 - 1
       window.id = 0 - 1;
 
-      fileTransfers.insert({connectionId, FileTransfer{msg.header.remote, std::move(file), fileSize, sha256, maxWindowSize, std::move(window)}});
+      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), fileSize, maxWindowSize, std::move(window)}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
@@ -169,48 +169,50 @@ namespace rft
       msg >> windowId;
       msg >> connectionId;
 
-      auto search = fileTransfers.find(connectionId);
-      if (search == fileTransfers.end()) {
+      auto search = connections.find(connectionId);
+      if (search == connections.end()) {
          // TODO: resume connection (remember to advance file idx pointer) & logging
          return;
       }
-      auto& ft = search->second;
+      auto& conn = search->second;
 
-      if (windowId != static_cast<uint8_t>(ft.window.id + 1)) {
+      if (windowId != static_cast<uint8_t>(conn.window.id + 1)) {
          // TODO: handle duplicate & logging
          return;
       }
 
-      ft.window.id = windowId;
-      ft.chunksWritten = chunkIdx;
+      // Connection Migration: Every time a request for a connection is received, update the endpoint information for that connection
+      conn.client = msg.header.remote;
+      conn.window.id = windowId;
+      conn.chunksWritten = chunkIdx;
 
-      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << ft.chunksWritten;
+      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << conn.chunksWritten;
 
       tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
+      for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
          // read chunk from file
          unsigned char buffer[CHUNK_SIZE];
-         ft.file.read(reinterpret_cast<char*>(buffer), CHUNK_SIZE);
-         const size_t numBytesRead = ft.file.gcount();
+         conn.file.read(reinterpret_cast<char*>(buffer), CHUNK_SIZE);
+         const size_t numBytesRead = conn.file.gcount();
          std::vector<unsigned char> chunk(std::begin(buffer), std::begin(buffer) + numBytesRead);
 
          // Read the last chunk of the file
          if (numBytesRead < CHUNK_SIZE) {
-            ft.window.currentSize = i + 1;
+            conn.window.currentSize = i + 1;
          }
 
          tmpMsgOut.header.size = 0;
 
          tmpMsgOut << ServerMsgType::PAYLOAD;
          tmpMsgOut << connectionId;
-         tmpMsgOut << ft.window.id;
-         tmpMsgOut << ft.window.currentSize;
+         tmpMsgOut << conn.window.id;
+         tmpMsgOut << conn.window.currentSize;
          tmpMsgOut << i;
          tmpMsgOut << chunk;
 
-         ft.window.store_chunk(chunk, i);
+         conn.window.store_chunk(chunk, i);
 
          send_msg_to_client(tmpMsgOut, msg.header.remote);
       }
@@ -232,23 +234,27 @@ namespace rft
 
       PLOG_INFO << "[Server] Received Retransmission Request for connection ID " << connectionId;
 
-      auto& ft = fileTransfers.at(connectionId);
-      Bitfield bitfield(ft.window.currentSize);
+      auto& conn = connections.at(connectionId);
+
+      // Connection Migration: Every time a request for a connection is received, update the endpoint information for that connection
+      conn.client = msg.header.remote;
+
+      Bitfield bitfield(conn.window.currentSize);
       bitfield.from(payload.data());
 
       tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      for (uint16_t i = 0; i < ft.window.currentSize; ++i) {
+      for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
          if (!bitfield[i]) {
             tmpMsgOut.header.size = 0;
 
             tmpMsgOut << ServerMsgType::PAYLOAD;
             tmpMsgOut << connectionId;
-            tmpMsgOut << ft.window.id;
-            tmpMsgOut << ft.window.currentSize;
+            tmpMsgOut << conn.window.id;
+            tmpMsgOut << conn.window.currentSize;
             tmpMsgOut << i;
-            tmpMsgOut << ft.window.chunks[i];
+            tmpMsgOut << conn.window.chunks[i];
 
             send_msg_to_client(tmpMsgOut, msg.header.remote);
          }

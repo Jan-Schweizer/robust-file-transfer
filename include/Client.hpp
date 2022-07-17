@@ -13,18 +13,17 @@ namespace rft
    class Client
    {
       // ------------------------------------------------------------------------
-      class FileTransfer
+      class Connection
       {
          friend class Client;
 
-         FileTransfer(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window)
+         Connection(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window)
              : fileName(std::move(fileName)), fileSize(fileSize), window(std::move(window))
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
             file.open(this->fileName, std::ios::binary | std::ios::trunc);
             if (!file) {
                PLOG_ERROR << "[Client] Could not open file for writing";
-               done = true;
                // TODO: find a way to communicate this error and terminate file transfer
             }
          }
@@ -37,7 +36,6 @@ namespace rft
          Window window;
          uint32_t chunksWritten = 0;
          uint16_t chunksReceivedInWindow = 0;
-         bool done = false;
       };
       // ------------------------------------------------------------------------
 
@@ -84,7 +82,7 @@ namespace rft
       boost::asio::ip::udp::endpoint remote_endpoint;
 
       std::string fileDest;
-      std::unordered_map<ConnectionID, FileTransfer> fileTransfers;
+      std::unordered_map<ConnectionID, Connection> connections;
 
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};
