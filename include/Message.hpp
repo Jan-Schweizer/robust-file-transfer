@@ -12,6 +12,7 @@ namespace rft
       FILE_REQUEST = 0,// aka Client Initial Request
       TRANSMISSION_REQUEST = 1,
       RETRANSMISSION_REQUEST = 2,
+      FINISH = 7,
 
       // Error Types
       CLIENT_ERROR = 8

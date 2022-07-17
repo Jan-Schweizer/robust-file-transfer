@@ -109,6 +109,9 @@ namespace rft
          case RETRANSMISSION_REQUEST:
             handle_retransmission_request(msg);
             break;
+         case FINISH:
+            handle_finish(msg);
+            break;
          case CLIENT_ERROR:
             break;
          // Ignore unknown packets
@@ -143,7 +146,7 @@ namespace rft
       // The first window id is 0. Therefore, the initial id is set to 0 - 1
       window.id = 0 - 1;
 
-      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), fileSize, maxWindowSize, std::move(window)}});
+      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), fileSize, maxWindowSize, std::move(window), io_context}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
@@ -156,6 +159,7 @@ namespace rft
       tmpMsgOut << sha256;
       tmpMsgOut << filename;
 
+      set_timeout(connectionId);
       send_msg_to_client(tmpMsgOut, msg.header.remote);
    }
    // ------------------------------------------------------------------------
@@ -172,6 +176,7 @@ namespace rft
       auto search = connections.find(connectionId);
       if (search == connections.end()) {
          // TODO: resume connection (remember to advance file idx pointer) & logging
+         PLOG_DEBUG << "No connection for: " << connectionId;
          return;
       }
       auto& conn = search->second;
@@ -214,10 +219,21 @@ namespace rft
 
          conn.window.store_chunk(chunk, i);
 
+         set_timeout(connectionId);
          send_msg_to_client(tmpMsgOut, msg.header.remote);
       }
 
       // TODO: update congestion control information
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_finish(Message<ClientMsgType>& msg)
+   {
+      ConnectionID connectionId;
+
+      msg >> connectionId;
+
+      PLOG_INFO << "[Server] Received Finish message for " << connectionId;
+      connections.erase(connectionId);
    }
    // ------------------------------------------------------------------------
    void Server::handle_retransmission_request(Message<ClientMsgType>& msg)
@@ -256,11 +272,32 @@ namespace rft
             tmpMsgOut << i;
             tmpMsgOut << conn.window.chunks[i];
 
+            set_timeout(connectionId);
             send_msg_to_client(tmpMsgOut, msg.header.remote);
          }
       }
 
       // TODO: update congestion control information
+   }
+   // ------------------------------------------------------------------------
+   void Server::set_timeout(ConnectionID connectionId)
+   {
+      auto& conn = connections.at(connectionId);
+
+      conn.t.expires_after(boost::asio::chrono::minutes(timeoutInSec));
+      conn.t.async_wait(boost::bind(&Server::handle_timeout, this, connectionId));
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_timeout(ConnectionID connectionId)
+   {
+      auto search = connections.find(connectionId);
+      if (search != connections.end()) {
+         auto& conn = connections.at(connectionId);
+         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+            PLOG_INFO << "Timeout expired for: " << connectionId;
+            connections.erase(connectionId);
+         }
+      }
    }
    // ------------------------------------------------------------------------
 }// namespace rft

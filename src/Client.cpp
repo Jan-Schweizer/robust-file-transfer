@@ -234,6 +234,7 @@ namespace rft
             PLOG_INFO << "[Client] Transferred file " << conn.fileName << " successfully";
             connections.erase(connectionId);
             done = connections.empty();
+            send_finish_msg(connectionId);
             return;
          }
 
@@ -267,7 +268,6 @@ namespace rft
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-
       auto& conn = connections.at(connectionId);
 
       Bitfield bitfield(conn.window.currentSize);
@@ -279,6 +279,18 @@ namespace rft
       tmpMsgOut << bitfield.bitfield;
 
       PLOG_INFO << "[Client] Requesting retransmission for connection ID " << connectionId;
+
+      send_msg(tmpMsgOut);
+   }
+   // ------------------------------------------------------------------------
+   void Client::send_finish_msg(ConnectionID connectionId)
+   {
+      tmpMsgOut.header.type = ClientMsgType::FINISH;
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+      tmpMsgOut << ClientMsgType::FINISH;
+      tmpMsgOut << connectionId;
 
       send_msg(tmpMsgOut);
    }

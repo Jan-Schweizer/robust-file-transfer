@@ -18,9 +18,9 @@ namespace rft
       {
          friend class Server;
 
-         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, uint16_t maxWindowSize, Window window)
-             : client(std::move(client)), file(std::move(file)), fileSize(fileSize), maxWindowSize(maxWindowSize), window(std::move(window))
-         { }
+         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, uint16_t maxWindowSize, Window window, boost::asio::io_context& io_context)
+             : client(std::move(client)), file(std::move(file)), fileSize(fileSize), maxWindowSize(maxWindowSize), window(std::move(window)), t(io_context)
+         {}
 
          boost::asio::ip::udp::endpoint client;
          std::ifstream file;
@@ -28,6 +28,8 @@ namespace rft
          uint16_t maxWindowSize;
          Window window;
          uint32_t chunksWritten = 0;
+
+         boost::asio::steady_timer t;
       };
       // ------------------------------------------------------------------------
 
@@ -53,10 +55,13 @@ namespace rft
 
       void enqueue_msg(size_t bytes_transferred);
       void decode_msg(size_t bytes_transferred);
+      void set_timeout(ConnectionID connectionId);
 
       void handle_file_request(Message<ClientMsgType>& msg);
       void handle_transmission_request(Message<ClientMsgType>& msg);
       void handle_retransmission_request(Message<ClientMsgType>& msg);
+      void handle_finish(Message<ClientMsgType>& msg);
+      void handle_timeout(ConnectionID connectionId);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
@@ -70,6 +75,8 @@ namespace rft
       Message<ClientMsgType> tmpMsgIn{};
       Message<ServerMsgType> tmpMsgOut{};
       MessageQueue<Message<ClientMsgType>> msgQueue;
+
+      const size_t timeoutInSec = 3;
    };
 }// namespace rft
 // ------------------------------------------------------------------------

@@ -72,6 +72,7 @@ namespace rft
 
       void request_transmission(ConnectionID connectionId);
       void request_retransmission(ConnectionID connectionId);
+      void send_finish_msg(ConnectionID connectionId);
 
       boost::asio::io_context io_context;
       boost::asio::ip::udp::socket socket;
