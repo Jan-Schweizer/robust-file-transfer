@@ -76,7 +76,7 @@ namespace rft
       Message<ServerMsgType> tmpMsgOut{};
       MessageQueue<Message<ClientMsgType>> msgQueue;
 
-      const size_t timeoutInSec = 3;
+      const size_t timeoutInMin = 3;
    };
 }// namespace rft
 // ------------------------------------------------------------------------

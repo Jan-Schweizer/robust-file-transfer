@@ -15,7 +15,7 @@ namespace rft
 
       std::vector<std::vector<unsigned char>> chunks;
       uint8_t id = 0;
-      uint16_t maxSize;
+      uint16_t maxSize = 0;
       uint16_t currentSize = 1;
       std::vector<bool> sequenceNumbers;
 

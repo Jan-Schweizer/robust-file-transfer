@@ -284,7 +284,7 @@ namespace rft
    {
       auto& conn = connections.at(connectionId);
 
-      conn.t.expires_after(boost::asio::chrono::minutes(timeoutInSec));
+      conn.t.expires_after(boost::asio::chrono::minutes(timeoutInMin));
       conn.t.async_wait(boost::bind(&Server::handle_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
@@ -292,7 +292,7 @@ namespace rft
    {
       auto search = connections.find(connectionId);
       if (search != connections.end()) {
-         auto& conn = connections.at(connectionId);
+         auto& conn = search->second;
          if (conn.t.expiry() <= steady_timer::clock_type::now()) {
             PLOG_INFO << "Timeout expired for: " << connectionId;
             connections.erase(connectionId);

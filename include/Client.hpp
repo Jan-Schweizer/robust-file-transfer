@@ -13,29 +13,47 @@ namespace rft
    class Client
    {
       // ------------------------------------------------------------------------
-      class Connection
+      class FileRequest
       {
          friend class Client;
 
-         Connection(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window)
-             : fileName(std::move(fileName)), fileSize(fileSize), window(std::move(window))
+         FileRequest(std::string& filename, boost::asio::io_context& io_context)
+             : filename(filename), t(io_context) {}
+
+         std::string& filename;
+         boost::asio::steady_timer t;
+         const size_t timeoutInMillis = 500;
+         uint8_t retryCounter = 1;
+         const uint8_t maxRetries = 10;
+      };
+      // ------------------------------------------------------------------------
+      class Connection
+      {
+         friend class Client;
+         Connection(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
+             : filename(std::move(fileName)), fileSize(fileSize), window(std::move(window)), t(io_context)
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
-            file.open(this->fileName, std::ios::binary | std::ios::trunc);
+            file.open(this->filename, std::ios::binary | std::ios::trunc);
             if (!file) {
                PLOG_ERROR << "[Client] Could not open file for writing";
                // TODO: find a way to communicate this error and terminate file transfer
             }
          }
 
-         std::string fileName;
+         std::string filename;
          std::ofstream file;
-         uint32_t fileSize;
+         uint32_t fileSize = 0;
          uint32_t bytesWritten = 0;
          unsigned char sha256[SHA256_SIZE]{'\0'};
          Window window;
          uint32_t chunksWritten = 0;
          uint16_t chunksReceivedInWindow = 0;
+
+         boost::asio::steady_timer t;
+         size_t timeoutInMillis = 500;
+         uint8_t retryCounter = 1;
+         const uint8_t maxRetries = 10;
       };
       // ------------------------------------------------------------------------
 
@@ -67,8 +85,15 @@ namespace rft
       void enqueue_msg(size_t bytes_transferred);
       void decode_msg(size_t bytes_transferred);
 
+      void set_timeout_for_file_request(std::string& filename);
+      void set_timeout_for_transmission(ConnectionID connectionId);
+      void set_timeout_for_retransmission(ConnectionID connectionId);
+
       void handle_initial_response(Message<ServerMsgType>& msg);
       void handle_payload_packet(Message<ServerMsgType>& msg);
+      void handle_file_request_timeout(std::string& filename);
+      void handle_transmission_timeout(ConnectionID connectionId);
+      void handle_retransmission_timeout(ConnectionID connectionId);
 
       void request_transmission(ConnectionID connectionId);
       void request_retransmission(ConnectionID connectionId);
@@ -84,10 +109,14 @@ namespace rft
 
       std::string fileDest;
       std::unordered_map<ConnectionID, Connection> connections;
+      std::unordered_map<std::string, FileRequest> fileRequests;
+
+      const size_t timeout_constant = 10;
 
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};
       MessageQueue<Message<ServerMsgType>> msgQueue;
+
       bool done = false;
    };
 }

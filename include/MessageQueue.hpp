@@ -3,9 +3,9 @@
 // ------------------------------------------------------------------------
 #include "Message.hpp"
 #include <condition_variable>
-#include <plog/Log.h>
 #include <deque>
 #include <mutex>
+#include <plog/Log.h>
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -82,11 +82,14 @@ namespace rft
 
       void wait()
       {
-         // TODO: maybe move the lock to here
-         while (empty()) {
-            std::unique_lock lock(mux_cv);
-            cv.wait(lock);
-         }
+         std::unique_lock lock(mux_cv);
+         cv.wait(lock);
+      }
+
+      void wake()
+      {
+         std::unique_lock lock(mux_cv);
+         cv.notify_one();
       }
 
     private:

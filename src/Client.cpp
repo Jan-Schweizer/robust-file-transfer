@@ -67,6 +67,9 @@ namespace rft
       tmpMsgOut << filename;
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
+
+      fileRequests.insert({filename, FileRequest{filename, io_context}});
+      set_timeout_for_file_request(filename);
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
@@ -167,11 +170,13 @@ namespace rft
       msg >> fileSize;
       msg >> connectionId;
 
+      fileRequests.erase(filename);
+
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 
       std::string dest = fileDest + "/" + filename;
       Window window{MAX_WINDOW_SIZE};
-      connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window)}});
+      connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window), io_context}});
 
       request_transmission(connectionId);
    }
@@ -204,11 +209,16 @@ namespace rft
          return;
       }
 
+      set_timeout_for_retransmission(connectionId);
+      // Server did respond -> reset retry counter
+      conn.retryCounter = 1;
+
       conn.window.store_chunk(chunk, sequenceNumber);
       conn.window.currentSize = currentWindowSize;
       ++conn.chunksReceivedInWindow;
 
       if (conn.chunksReceivedInWindow == conn.window.currentSize) {
+         // TODO: maybe extract this to separate function
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = conn.window.chunks[i].size();
@@ -225,15 +235,15 @@ namespace rft
 
          if (conn.bytesWritten == conn.fileSize) {
             unsigned char sha256[SHA256_SIZE];
-            compute_SHA256(conn.fileName, sha256);
+            compute_SHA256(conn.filename, sha256);
             if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
-               PLOG_ERROR << "[Client] File " << conn.fileName << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
+               PLOG_ERROR << "[Client] File " << conn.filename << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
                return;
             }
 
-            PLOG_INFO << "[Client] Transferred file " << conn.fileName << " successfully";
+            PLOG_INFO << "[Client] Transferred file " << conn.filename << " successfully";
             connections.erase(connectionId);
-            done = connections.empty();
+            done = connections.empty() && fileRequests.empty();
             send_finish_msg(connectionId);
             return;
          }
@@ -245,6 +255,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::request_transmission(ConnectionID connectionId)
    {
+      set_timeout_for_transmission(connectionId);
+
       tmpMsgOut.header.type = ClientMsgType::TRANSMISSION_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
@@ -257,13 +269,15 @@ namespace rft
 
       conn.chunksReceivedInWindow = 0;
 
-      PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.fileName;
+      PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.filename;
 
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
    void Client::request_retransmission(ConnectionID connectionId)
    {
+      set_timeout_for_retransmission(connectionId);
+
       tmpMsgOut.header.type = ClientMsgType::RETRANSMISSION_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
@@ -293,6 +307,96 @@ namespace rft
       tmpMsgOut << connectionId;
 
       send_msg(tmpMsgOut);
+   }
+   // ------------------------------------------------------------------------
+   void Client::set_timeout_for_file_request(std::string& filename)
+   {
+      auto& fr = fileRequests.at(filename);
+      fr.t.expires_after(boost::asio::chrono::milliseconds(fr.timeoutInMillis));
+      fr.t.async_wait(boost::bind(&Client::handle_file_request_timeout, this, filename));
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_file_request_timeout(std::string& filename)
+   {
+      auto search = fileRequests.find(filename);
+      if (search != fileRequests.end()) {
+         auto& fr = search->second;
+
+         if (fr.retryCounter >= fr.maxRetries) {
+            PLOG_ERROR << "[Client] Requested file " << filename << " multiple times without success.";
+            fileRequests.erase(filename);
+            done = fileRequests.empty() && connections.empty();
+            // wake the main thread that is waiting on the msqQueue condition variable
+            msgQueue.wake();
+            return;
+         }
+
+         if (fr.t.expiry() <= steady_timer::clock_type::now()) {
+            PLOG_INFO << "[Client] Repeating request for file: " << filename;
+            ++fr.retryCounter;
+            request_file(filename);
+         }
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::set_timeout_for_transmission(ConnectionID connectionId)
+   {
+      auto& conn = connections.at(connectionId);
+      conn.t.expires_after(boost::asio::chrono::milliseconds(conn.timeoutInMillis));
+      conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_transmission_timeout(ConnectionID connectionId)
+   {
+      auto search = connections.find(connectionId);
+      if (search != connections.end()) {
+         auto& conn = search->second;
+
+         if (conn.retryCounter > conn.maxRetries) {
+            PLOG_ERROR << "[Client] Sent multiple Transmission Requests. Server may have disconnected.";
+            connections.erase(connectionId);
+            done = fileRequests.empty() && connections.empty();
+            // wake the main thread that is waiting on the msqQueue condition variable
+            msgQueue.wake();
+            return;
+         }
+
+         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+            PLOG_INFO << "[Client] Repeating Transmission Request for " << connectionId;
+            ++conn.retryCounter;
+            request_transmission(connectionId);
+         }
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::set_timeout_for_retransmission(ConnectionID connectionId)
+   {
+      auto& conn = connections.at(connectionId);
+      conn.t.expires_after(boost::asio::chrono::milliseconds(conn.timeoutInMillis));
+      conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_retransmission_timeout(ConnectionID connectionId)
+   {
+      auto search = connections.find(connectionId);
+      if (search != connections.end()) {
+         auto& conn = search->second;
+
+         if (conn.retryCounter > conn.maxRetries) {
+            PLOG_ERROR << "[Client] Sent multiple Retransmission Requests. Server may have disconnected.";
+            connections.erase(connectionId);
+            done = fileRequests.empty() && connections.empty();
+            // wake the main thread that is waiting on the msqQueue condition variable
+            msgQueue.wake();
+            return;
+         }
+
+         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+            PLOG_INFO << "[Client] Retransmission Request for " << connectionId;
+            ++conn.retryCounter;
+            request_retransmission(connectionId);
+         }
+      }
    }
    // ------------------------------------------------------------------------
 }// namespace rft
