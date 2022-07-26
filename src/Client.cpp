@@ -69,7 +69,10 @@ namespace rft
       PLOG_INFO << "[Client] Requesting file: " << filename;
 
       fileRequests.insert({filename, FileRequest{filename, io_context}});
+
       set_timeout_for_file_request(filename);
+      fileRequests.at(filename).tp = NOW;
+
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
@@ -158,6 +161,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
    {
+      auto end = NOW;
+
       size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE + 1);
 
       ConnectionID connectionId;
@@ -169,6 +174,10 @@ namespace rft
       msg >> sha256;
       msg >> fileSize;
       msg >> connectionId;
+
+      auto duration = boost::asio::chrono::duration_cast<boost::asio::chrono::milliseconds>(end - fileRequests.at(filename).tp);
+      ++rttCount;
+      rttTotalMS += duration.count();
 
       fileRequests.erase(filename);
 
@@ -183,6 +192,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_payload_packet(Message<ServerMsgType>& msg)
    {
+      auto end = NOW;
+
       uint16_t chunkSize = msg.header.size - (PAYLOAD_META_DATA_SIZE);
 
       ConnectionID connectionId;
@@ -204,6 +215,13 @@ namespace rft
       }
       auto& conn = search->second;
 
+      if (conn.shouldMeasureTime) {
+         auto duration = boost::asio::chrono::duration_cast<boost::asio::chrono::milliseconds>(end - conn.tp);
+         ++rttCount;
+         rttTotalMS += duration.count();
+         conn.shouldMeasureTime = false;
+      }
+
       if (windowId != conn.window.id) {
          // Ignore delayed packets
          return;
@@ -219,6 +237,8 @@ namespace rft
 
       if (conn.chunksReceivedInWindow == conn.window.currentSize) {
          // TODO: maybe extract this to separate function
+         conn.t.cancel();
+
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = conn.window.chunks[i].size();
@@ -271,6 +291,9 @@ namespace rft
 
       PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.filename;
 
+      conn.shouldMeasureTime = true;
+      conn.tp = NOW;
+
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
@@ -294,6 +317,9 @@ namespace rft
 
       PLOG_INFO << "[Client] Requesting retransmission for connection ID " << connectionId;
 
+      conn.shouldMeasureTime = true;
+      conn.tp = NOW;
+
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
@@ -312,7 +338,8 @@ namespace rft
    void Client::set_timeout_for_file_request(std::string& filename)
    {
       auto& fr = fileRequests.at(filename);
-      fr.t.expires_after(boost::asio::chrono::milliseconds(fr.timeoutInMillis));
+      // Set a long timeout for a file request (calculation of SHA256 can take a while)
+      fr.t.expires_after(boost::asio::chrono::minutes(10));
       fr.t.async_wait(boost::bind(&Client::handle_file_request_timeout, this, filename));
    }
    // ------------------------------------------------------------------------
@@ -342,7 +369,9 @@ namespace rft
    void Client::set_timeout_for_transmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(boost::asio::chrono::milliseconds(conn.timeoutInMillis));
+      // Set at least 50ms timeout. Otherwise, timeout is too short for local environment
+      auto timeout = std::max(50UL, rttTotalMS / rttCount * TIMEOUT);
+      conn.t.expires_after(boost::asio::chrono::milliseconds(timeout));
       conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
@@ -372,7 +401,9 @@ namespace rft
    void Client::set_timeout_for_retransmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(boost::asio::chrono::milliseconds(conn.timeoutInMillis));
+      // Set at least 50ms timeout. Otherwise, timeout is too short for local environment
+      auto timeout = std::max(50UL, rttTotalMS / rttCount * TIMEOUT);
+      conn.t.expires_after(boost::asio::chrono::milliseconds(timeout));
       conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------

@@ -22,7 +22,7 @@ namespace rft
 
          std::string& filename;
          boost::asio::steady_timer t;
-         const size_t timeoutInMillis = 500;
+         boost::asio::chrono::time_point<boost::asio::chrono::high_resolution_clock> tp;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;
       };
@@ -51,7 +51,8 @@ namespace rft
          uint16_t chunksReceivedInWindow = 0;
 
          boost::asio::steady_timer t;
-         size_t timeoutInMillis = 500;
+         boost::asio::chrono::time_point<boost::asio::chrono::high_resolution_clock> tp;
+         bool shouldMeasureTime = true;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;
       };
@@ -111,7 +112,12 @@ namespace rft
       std::unordered_map<ConnectionID, Connection> connections;
       std::unordered_map<std::string, FileRequest> fileRequests;
 
-      const size_t timeout_constant = 10;
+      /// A constant that is multiplied to the average rtt
+      /// E.g. setting the timeout to be 10 times longer than the average rtt
+      const size_t TIMEOUT = 10;
+      /// Assume a 50ms RTT at the beginning
+      uint32_t rttTotalMS = 50;
+      size_t rttCount = 1;
 
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};

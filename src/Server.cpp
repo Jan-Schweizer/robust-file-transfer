@@ -143,8 +143,6 @@ namespace rft
       unsigned char sha256[SHA256_SIZE];
       compute_SHA256(filename, sha256);
       Window window(maxWindowSize);
-      // The first window id is 0. Therefore, the initial id is set to 0 - 1
-      window.id = 0 - 1;
 
       connections.insert({connectionId, Connection{msg.header.remote, std::move(file), fileSize, maxWindowSize, std::move(window), io_context}});
 
@@ -181,11 +179,6 @@ namespace rft
       }
       auto& conn = search->second;
 
-      if (windowId != static_cast<uint8_t>(conn.window.id + 1)) {
-         // TODO: handle duplicate & logging
-         return;
-      }
-
       // Connection Migration: Every time a request for a connection is received, update the endpoint information for that connection
       conn.client = msg.header.remote;
       conn.window.id = windowId;
@@ -197,7 +190,8 @@ namespace rft
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
-         // read chunk from file
+         // set offset into file and read chunk from file
+         conn.file.seekg(chunkIdx * CHUNK_SIZE);
          unsigned char buffer[CHUNK_SIZE];
          conn.file.read(reinterpret_cast<char*>(buffer), CHUNK_SIZE);
          const size_t numBytesRead = conn.file.gcount();

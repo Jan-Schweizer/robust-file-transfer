@@ -5,6 +5,8 @@
 #include <boost/asio.hpp>
 #include <cstdint>
 // ------------------------------------------------------------------------
+#define NOW boost::asio::chrono::high_resolution_clock::now()
+// ------------------------------------------------------------------------
 namespace rft
 {
    using namespace boost::asio;
