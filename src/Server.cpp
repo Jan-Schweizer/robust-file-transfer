@@ -1,6 +1,7 @@
 // ------------------------------------------------------------------------
 #include "Server.hpp"
 #include "Bitfield.hpp"
+#include "CongestionControl.hpp"
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
 #include <filesystem>
@@ -144,7 +145,7 @@ namespace rft
       compute_SHA256(filename, sha256);
       Window window(maxWindowSize);
 
-      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), fileSize, maxWindowSize, std::move(window), io_context}});
+      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxWindowSize, std::move(window), io_context}});
 
       // Build Initial Response Packet with file metadata
       tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
@@ -165,16 +166,18 @@ namespace rft
    {
       ConnectionID connectionId;
       uint8_t windowId;
+      uint32_t rttCurrent;
       uint32_t chunkIdx;
 
       msg >> chunkIdx;
+      msg >> rttCurrent;
       msg >> windowId;
       msg >> connectionId;
 
       auto search = connections.find(connectionId);
       if (search == connections.end()) {
          // TODO: resume connection (remember to advance file idx pointer) & logging
-         PLOG_DEBUG << "No connection for: " << connectionId;
+         PLOG_INFO << "No connection for: " << connectionId;
          return;
       }
       auto& conn = search->second;
@@ -189,9 +192,15 @@ namespace rft
       tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
+      // In AVOIDANCE, the window is updated before the transmission
+      if (conn.cc.phase == CongestionControl::Phase::CC_AVOIDANCE) {
+         conn.window.currentSize = conn.cc.updateCWND(rttCurrent);
+      }
+
+      // set offset into file
+      conn.file.seekg(chunkIdx * CHUNK_SIZE);
       for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
-         // set offset into file and read chunk from file
-         conn.file.seekg(chunkIdx * CHUNK_SIZE);
+         // read chunk from file
          unsigned char buffer[CHUNK_SIZE];
          conn.file.read(reinterpret_cast<char*>(buffer), CHUNK_SIZE);
          const size_t numBytesRead = conn.file.gcount();
@@ -217,7 +226,12 @@ namespace rft
          send_msg_to_client(tmpMsgOut, msg.header.remote);
       }
 
-      // TODO: update congestion control information
+      // In NORMAL, the window is updated after the transmission
+      if (conn.cc.phase == CongestionControl::Phase::CC_AVOIDANCE) {
+         conn.cc.phase = CongestionControl::Phase::CC_NORMAL;
+      } else {
+         conn.window.currentSize = conn.cc.updateCWND(rttCurrent);
+      }
    }
    // ------------------------------------------------------------------------
    void Server::handle_finish(Message<ClientMsgType>& msg)
@@ -246,6 +260,8 @@ namespace rft
 
       auto& conn = connections.at(connectionId);
 
+      conn.cc.phase = CongestionControl::Phase::CC_AVOIDANCE;
+
       // Connection Migration: Every time a request for a connection is received, update the endpoint information for that connection
       conn.client = msg.header.remote;
 
@@ -270,8 +286,6 @@ namespace rft
             send_msg_to_client(tmpMsgOut, msg.header.remote);
          }
       }
-
-      // TODO: update congestion control information
    }
    // ------------------------------------------------------------------------
    void Server::set_timeout(ConnectionID connectionId)

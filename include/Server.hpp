@@ -1,6 +1,7 @@
 #ifndef ROBUST_FILE_TRANSFER_SERVER_HPP
 #define ROBUST_FILE_TRANSFER_SERVER_HPP
 // ------------------------------------------------------------------------
+#include "CongestionControl.hpp"
 #include "MessageQueue.hpp"
 #include "Window.hpp"
 #include "common.hpp"
@@ -18,15 +19,14 @@ namespace rft
       {
          friend class Server;
 
-         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint32_t fileSize, uint16_t maxWindowSize, Window window, boost::asio::io_context& io_context)
-             : client(std::move(client)), file(std::move(file)), fileSize(fileSize), maxWindowSize(maxWindowSize), window(std::move(window)), t(io_context)
+         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint16_t maxWindowSize, Window window, boost::asio::io_context& io_context)
+             : client(std::move(client)), file(std::move(file)), window(std::move(window)), cc(maxWindowSize), t(io_context)
          {}
 
          boost::asio::ip::udp::endpoint client;
          std::ifstream file;
-         uint32_t fileSize;
-         uint16_t maxWindowSize;
          Window window;
+         CongestionControl cc;
          uint32_t chunksWritten = 0;
 
          boost::asio::steady_timer t;

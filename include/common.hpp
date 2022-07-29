@@ -6,6 +6,10 @@
 #include <cstdint>
 // ------------------------------------------------------------------------
 #define NOW boost::asio::chrono::high_resolution_clock::now()
+#define MILLIS boost::asio::chrono::milliseconds
+#define MICROS boost::asio::chrono::microseconds
+#define NANOS boost::asio::chrono::nanoseconds
+#define TIME_UNIT MICROS
 // ------------------------------------------------------------------------
 namespace rft
 {
