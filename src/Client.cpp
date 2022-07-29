@@ -175,9 +175,10 @@ namespace rft
       msg >> fileSize;
       msg >> connectionId;
 
-      auto duration = boost::asio::chrono::duration_cast<boost::asio::chrono::milliseconds>(end - fileRequests.at(filename).tp);
+      auto duration = boost::asio::chrono::duration_cast<TIME_UNIT>(end - fileRequests.at(filename).tp);
       ++rttCount;
-      rttTotalMS += duration.count();
+      rttCurrent = duration.count();
+      rttTotal += rttCurrent;
 
       fileRequests.erase(filename);
 
@@ -216,9 +217,10 @@ namespace rft
       auto& conn = search->second;
 
       if (conn.shouldMeasureTime) {
-         auto duration = boost::asio::chrono::duration_cast<boost::asio::chrono::milliseconds>(end - conn.tp);
+         auto duration = boost::asio::chrono::duration_cast<TIME_UNIT>(end - conn.tp);
          ++rttCount;
-         rttTotalMS += duration.count();
+         rttCurrent = duration.count();
+         rttTotal += rttCurrent;
          conn.shouldMeasureTime = false;
       }
 
@@ -243,6 +245,7 @@ namespace rft
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = conn.window.chunks[i].size();
             conn.file.write(reinterpret_cast<char*>(conn.window.chunks[i].data()), bytes);
+            // TODO: check for badbit and send no space left error message
             bytesWritten += bytes;
          }
          conn.bytesWritten += bytesWritten;
@@ -258,6 +261,8 @@ namespace rft
             compute_SHA256(conn.filename, sha256);
             if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
                PLOG_ERROR << "[Client] File " << conn.filename << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
+               connections.erase(connectionId);
+               done = connections.empty() && fileRequests.empty();
                return;
             }
 
@@ -285,6 +290,7 @@ namespace rft
       tmpMsgOut << ClientMsgType::TRANSMISSION_REQUEST;
       tmpMsgOut << connectionId;
       tmpMsgOut << conn.window.id;
+      tmpMsgOut << rttCurrent;
       tmpMsgOut << conn.chunksWritten;
 
       conn.chunksReceivedInWindow = 0;
@@ -369,9 +375,7 @@ namespace rft
    void Client::set_timeout_for_transmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      // Set at least 50ms timeout. Otherwise, timeout is too short for local environment
-      auto timeout = std::max(50UL, rttTotalMS / rttCount * TIMEOUT);
-      conn.t.expires_after(boost::asio::chrono::milliseconds(timeout));
+      conn.t.expires_after(TIME_UNIT(rttTotal/ rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
@@ -401,9 +405,7 @@ namespace rft
    void Client::set_timeout_for_retransmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      // Set at least 50ms timeout. Otherwise, timeout is too short for local environment
-      auto timeout = std::max(50UL, rttTotalMS / rttCount * TIMEOUT);
-      conn.t.expires_after(boost::asio::chrono::milliseconds(timeout));
+      conn.t.expires_after(TIME_UNIT(rttTotal/ rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------

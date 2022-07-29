@@ -115,9 +115,9 @@ namespace rft
       /// A constant that is multiplied to the average rtt
       /// E.g. setting the timeout to be 10 times longer than the average rtt
       const size_t TIMEOUT = 10;
-      /// Assume a 50ms RTT at the beginning
-      uint32_t rttTotalMS = 50;
+      uint32_t rttTotal = 0;
       size_t rttCount = 1;
+      uint32_t rttCurrent = 0;
 
       Message<ServerMsgType> tmpMsgIn{};
       Message<ClientMsgType> tmpMsgOut{};
