@@ -6,16 +6,18 @@
 #include <cstdint>
 // ------------------------------------------------------------------------
 #define NOW boost::asio::chrono::high_resolution_clock::now()
-#define MILLIS boost::asio::chrono::milliseconds
-#define MICROS boost::asio::chrono::microseconds
-#define NANOS boost::asio::chrono::nanoseconds
-#define TIME_UNIT MICROS
 // ------------------------------------------------------------------------
 namespace rft
 {
    using namespace boost::asio;
 
    using ConnectionID = uint16_t;
+
+   using timepoint = chrono::time_point<boost::asio::chrono::high_resolution_clock>;
+   using nanos = chrono::nanoseconds;
+   using micros = chrono::microseconds;
+   using millis = chrono::milliseconds;
+   using timeunit = micros;
 
    /// Size of a data chunk from the file
    const uint16_t CHUNK_SIZE = 512;

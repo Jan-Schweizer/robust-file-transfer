@@ -175,7 +175,7 @@ namespace rft
       msg >> fileSize;
       msg >> connectionId;
 
-      auto duration = boost::asio::chrono::duration_cast<TIME_UNIT>(end - fileRequests.at(filename).tp);
+      auto duration = boost::asio::chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
       ++rttCount;
       rttCurrent = duration.count();
       rttTotal += rttCurrent;
@@ -217,7 +217,7 @@ namespace rft
       auto& conn = search->second;
 
       if (conn.shouldMeasureTime) {
-         auto duration = boost::asio::chrono::duration_cast<TIME_UNIT>(end - conn.tp);
+         auto duration = boost::asio::chrono::duration_cast<timeunit>(end - conn.tp);
          ++rttCount;
          rttCurrent = duration.count();
          rttTotal += rttCurrent;
@@ -375,7 +375,7 @@ namespace rft
    void Client::set_timeout_for_transmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(TIME_UNIT(rttTotal/ rttCount * TIMEOUT));
+      conn.t.expires_after(timeunit(rttTotal/ rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
@@ -405,7 +405,7 @@ namespace rft
    void Client::set_timeout_for_retransmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(TIME_UNIT(rttTotal/ rttCount * TIMEOUT));
+      conn.t.expires_after(timeunit(rttTotal/ rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------

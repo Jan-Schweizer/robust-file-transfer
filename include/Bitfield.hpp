@@ -21,6 +21,7 @@ namespace rft
       class BitReference
       {
          friend class Bitfield;
+         // TODO: replace Bitfield& with char& and loose the byte
          Bitfield& bitfield;
          uint16_t byte;
          uint16_t offset;

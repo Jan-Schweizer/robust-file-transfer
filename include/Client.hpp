@@ -22,7 +22,7 @@ namespace rft
 
          std::string& filename;
          boost::asio::steady_timer t;
-         boost::asio::chrono::time_point<boost::asio::chrono::high_resolution_clock> tp;
+         timepoint tp;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;
       };
@@ -51,7 +51,7 @@ namespace rft
          uint16_t chunksReceivedInWindow = 0;
 
          boost::asio::steady_timer t;
-         boost::asio::chrono::time_point<boost::asio::chrono::high_resolution_clock> tp;
+         timepoint tp;
          bool shouldMeasureTime = true;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;

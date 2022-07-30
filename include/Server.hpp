@@ -27,7 +27,6 @@ namespace rft
          std::ifstream file;
          Window window;
          CongestionControl cc;
-         uint32_t chunksWritten = 0;
 
          boost::asio::steady_timer t;
       };

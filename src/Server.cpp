@@ -185,9 +185,8 @@ namespace rft
       // Connection Migration: Every time a request for a connection is received, update the endpoint information for that connection
       conn.client = msg.header.remote;
       conn.window.id = windowId;
-      conn.chunksWritten = chunkIdx;
 
-      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << conn.chunksWritten;
+      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << chunkIdx;
 
       tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
@@ -240,7 +239,7 @@ namespace rft
 
       msg >> connectionId;
 
-      PLOG_INFO << "[Server] Received Finish message for " << connectionId;
+      PLOG_INFO << "[Server] Received Finish message for connection ID " << connectionId;
       connections.erase(connectionId);
    }
    // ------------------------------------------------------------------------
