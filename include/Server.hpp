@@ -57,6 +57,7 @@ namespace rft
       void set_timeout(ConnectionID connectionId);
 
       void handle_file_request(Message<ClientMsgType>& msg);
+      void handle_validation_response(Message<ClientMsgType>& msg);
       void handle_transmission_request(Message<ClientMsgType>& msg);
       void handle_retransmission_request(Message<ClientMsgType>& msg);
       void handle_finish(Message<ClientMsgType>& msg);

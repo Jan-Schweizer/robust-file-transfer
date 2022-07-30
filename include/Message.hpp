@@ -10,22 +10,26 @@ namespace rft
    {
       // Standard Types
       FILE_REQUEST = 0,// aka Client Initial Request
-      TRANSMISSION_REQUEST = 1,
-      RETRANSMISSION_REQUEST = 2,
-      FINISH = 7,
+      CLIENT_VALIDATION_RESPONSE = 2,
+      TRANSMISSION_REQUEST = 4,
+      RETRANSMISSION_REQUEST = 6,
+      CLIENT_FINISH_MESSAGE = 7,
 
       // Error Types
-      CLIENT_ERROR = 8
+      ERROR_CONNECTION_TERMINATION = 12
    };
    // ------------------------------------------------------------------------
    enum ServerMsgType : uint8_t
    {
       // Standard Types
-      SERVER_INITIAL_RESPONSE = 0,
-      PAYLOAD = 1,// aka Server Data Response
+      SERVER_VALIDATION_REQUEST = 1,
+      SERVER_INITIAL_RESPONSE = 3,
+      PAYLOAD = 5,// aka Server Data Response
 
       // Error Types
-      SERVER_ERROR = 8
+      ERROR_FILE_NOT_FOUND = 11,
+      ERROR_CLIENT_VALIDATION_FAILED = 10,
+      ERROR_CONNECTION_NOT_FOUND = 13
    };
    // ------------------------------------------------------------------------
    template<typename MsgType>

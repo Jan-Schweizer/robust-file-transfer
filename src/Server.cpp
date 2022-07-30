@@ -104,16 +104,19 @@ namespace rft
          case FILE_REQUEST:
             handle_file_request(msg);
             break;
+         case CLIENT_VALIDATION_RESPONSE:
+            handle_validation_response(msg);
+            break;
          case TRANSMISSION_REQUEST:
             handle_transmission_request(msg);
             break;
          case RETRANSMISSION_REQUEST:
             handle_retransmission_request(msg);
             break;
-         case FINISH:
+         case CLIENT_FINISH_MESSAGE:
             handle_finish(msg);
             break;
-         case CLIENT_ERROR:
+         case ERROR_CONNECTION_TERMINATION:
             break;
          // Ignore unknown packets
          default:
@@ -123,14 +126,51 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::handle_file_request(Message<ClientMsgType>& msg)
    {
+      uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + 1);
+
+      uint8_t difficulty = 0;
+      unsigned char hash1[SHA256_SIZE];
+      unsigned char hash2[SHA256_SIZE];
+      uint32_t nonce = chrono::duration_cast<seconds>(NOW.time_since_epoch()).count();
+      std::string filename(filenameSize, '\0');
+
+      msg >> filename;
+
+      tmpMsgOut.header.type = SERVER_VALIDATION_REQUEST;
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+      tmpMsgOut << SERVER_VALIDATION_REQUEST;
+      tmpMsgOut << difficulty;
+      tmpMsgOut << hash1;
+      tmpMsgOut << hash2;
+      tmpMsgOut << nonce;
+      tmpMsgOut << filename;
+
+      PLOG_INFO << "[Server] Client requesting file: " << filename;
+
+      send_msg_to_client(tmpMsgOut, msg.header.remote);
+   }
+   // ------------------------------------------------------------------------
+   void Server::handle_validation_response(Message<ClientMsgType>& msg)
+   {
+      hexdump(msg.packet, msg.header.size);
+
+      uint32_t filenameSize = msg.header.size - CLIENT_VALIDATION_RESPONSE_META_DATA_SIZE;
+
+      unsigned char hash1[SHA256_SIZE];
+      uint32_t nonce;
       uint16_t maxWindowSize;
-      uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + sizeof(ConnectionID) + sizeof(MAX_WINDOW_SIZE) + 1);
       std::string filename(filenameSize, '\0');
 
       msg >> filename;
       msg >> maxWindowSize;
+      msg >> nonce;
+      msg >> hash1;
 
-      PLOG_INFO << "[Server] Client requesting file: " << filename;
+      // TODO: verify solution
+
+      PLOG_INFO << "[Server] Client has passed validation for file: " << filename;
 
       std::ifstream file(filename, std::ios::in | std::ios::binary);
       if (!file) {
@@ -140,19 +180,18 @@ namespace rft
       }
 
       ConnectionID connectionId = connectionIdPool++;
-      uint32_t fileSize = std::filesystem::file_size(filename);
+      uint64_t fileSize = std::filesystem::file_size(filename);
       unsigned char sha256[SHA256_SIZE];
       compute_SHA256(filename, sha256);
       Window window(maxWindowSize);
 
       connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxWindowSize, std::move(window), io_context}});
 
-      // Build Initial Response Packet with file metadata
-      tmpMsgOut.header.type = ServerMsgType::SERVER_INITIAL_RESPONSE;
+      tmpMsgOut.header.type = SERVER_INITIAL_RESPONSE;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << ServerMsgType::SERVER_INITIAL_RESPONSE;
+      tmpMsgOut << SERVER_INITIAL_RESPONSE;
       tmpMsgOut << connectionId;
       tmpMsgOut << fileSize;
       tmpMsgOut << sha256;
@@ -188,7 +227,7 @@ namespace rft
 
       PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << chunkIdx;
 
-      tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
+      tmpMsgOut.header.type = PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       // In AVOIDANCE, the window is updated before the transmission
@@ -212,7 +251,7 @@ namespace rft
 
          tmpMsgOut.header.size = 0;
 
-         tmpMsgOut << ServerMsgType::PAYLOAD;
+         tmpMsgOut << PAYLOAD;
          tmpMsgOut << connectionId;
          tmpMsgOut << conn.window.id;
          tmpMsgOut << conn.window.currentSize;
@@ -267,14 +306,14 @@ namespace rft
       Bitfield bitfield(conn.window.currentSize);
       bitfield.from(payload.data());
 
-      tmpMsgOut.header.type = ServerMsgType::PAYLOAD;
+      tmpMsgOut.header.type = PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
          if (!bitfield[i]) {
             tmpMsgOut.header.size = 0;
 
-            tmpMsgOut << ServerMsgType::PAYLOAD;
+            tmpMsgOut << PAYLOAD;
             tmpMsgOut << connectionId;
             tmpMsgOut << conn.window.id;
             tmpMsgOut << conn.window.currentSize;

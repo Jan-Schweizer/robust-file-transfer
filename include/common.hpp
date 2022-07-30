@@ -17,18 +17,25 @@ namespace rft
    using nanos = chrono::nanoseconds;
    using micros = chrono::microseconds;
    using millis = chrono::milliseconds;
+   using seconds = chrono::seconds;
    using timeunit = micros;
 
    /// Size of a data chunk from the file
    const uint16_t CHUNK_SIZE = 512;
-   /// Size of the Server Payload Packet meta data
-   const uint16_t PAYLOAD_META_DATA_SIZE = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
-   /// Maximum size of a packet (Server Payload Packet aka Server Data Response)
-   const uint16_t MAX_PACKET_SIZE = CHUNK_SIZE + PAYLOAD_META_DATA_SIZE;
    /// Size of the SHA256 hash
    const uint8_t SHA256_SIZE = 32;
    /// Maximum receiving chunk size of a client
    const uint16_t MAX_WINDOW_SIZE = 64;
+   /// Size of the Server Validation Request meta data (without filename hence)
+   const uint16_t SERVER_VALIDATION_REQUEST_META_DATA_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + SHA256_SIZE + SHA256_SIZE + sizeof(uint32_t) + 1;
+   /// Size of the Client Validation Response meta data (without filename hence)
+   const uint16_t CLIENT_VALIDATION_RESPONSE_META_DATA_SIZE = sizeof(uint8_t) + SHA256_SIZE + sizeof(uint32_t) + sizeof(uint16_t) + 1;
+   /// Size of the Server Initial Response meta data (without filename)
+   const uint16_t SERVER_INITIAL_RESPONSE_META_DATA = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint64_t) + SHA256_SIZE + 1;
+   /// Size of the Server Payload Packet meta data
+   const uint16_t PAYLOAD_META_DATA_SIZE = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
+   /// Maximum size of a packet (Server Payload Packet aka Server Data Response)
+   const uint16_t MAX_PACKET_SIZE = CHUNK_SIZE + PAYLOAD_META_DATA_SIZE;
 }// namespace rft
 // ------------------------------------------------------------------------
 #endif//ROBUST_FILE_TRANSFER_COMMON_HPP

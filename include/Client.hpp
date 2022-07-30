@@ -30,7 +30,7 @@ namespace rft
       class Connection
       {
          friend class Client;
-         Connection(std::string& fileName, uint32_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
+         Connection(std::string& fileName, uint64_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
              : filename(std::move(fileName)), fileSize(fileSize), window(std::move(window)), t(io_context)
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
@@ -43,7 +43,7 @@ namespace rft
 
          std::string filename;
          std::ofstream file;
-         uint32_t fileSize = 0;
+         uint64_t fileSize = 0;
          uint32_t bytesWritten = 0;
          unsigned char sha256[SHA256_SIZE]{'\0'};
          Window window;
@@ -90,6 +90,7 @@ namespace rft
       void set_timeout_for_transmission(ConnectionID connectionId);
       void set_timeout_for_retransmission(ConnectionID connectionId);
 
+      void handle_validation_request(Message<ServerMsgType>& msg);
       void handle_initial_response(Message<ServerMsgType>& msg);
       void handle_payload_packet(Message<ServerMsgType>& msg);
       void handle_file_request_timeout(std::string& filename);

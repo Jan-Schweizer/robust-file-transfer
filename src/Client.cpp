@@ -54,16 +54,11 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::request_file(std::string& filename)
    {
-      tmpMsgOut.header.type = ClientMsgType::FILE_REQUEST;
+      tmpMsgOut.header.type = FILE_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      // Initial ConnectionId for a file request is set to 0
-      ConnectionID connectionId = 0;
-
-      tmpMsgOut << ClientMsgType::FILE_REQUEST;
-      tmpMsgOut << connectionId;
-      tmpMsgOut << MAX_WINDOW_SIZE;
+      tmpMsgOut << FILE_REQUEST;
       tmpMsgOut << filename;
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
@@ -145,13 +140,18 @@ namespace rft
    void Client::dispatch_msg(Message<ServerMsgType>& msg)
    {
       switch (msg.header.type) {
+         case SERVER_VALIDATION_REQUEST:
+            handle_validation_request(msg);
+            break;
          case SERVER_INITIAL_RESPONSE:
             handle_initial_response(msg);
             break;
          case PAYLOAD:
             handle_payload_packet(msg);
             break;
-         case SERVER_ERROR:
+         case ERROR_FILE_NOT_FOUND:
+         case ERROR_CLIENT_VALIDATION_FAILED:
+         case ERROR_CONNECTION_NOT_FOUND:
             break;
          // Ignore unknown packets
          default:
@@ -159,14 +159,47 @@ namespace rft
       }
    }
    // ------------------------------------------------------------------------
+   void Client::handle_validation_request(Message<ServerMsgType>& msg)
+   {
+      uint32_t filenameSize = msg.header.size - SERVER_VALIDATION_REQUEST_META_DATA_SIZE;
+      uint8_t difficulty;
+      unsigned char hash1[SHA256_SIZE];
+      unsigned char hash2[SHA256_SIZE];
+      uint32_t nonce;
+      std::string filename(filenameSize, '\0');
+
+      msg >> filename;
+      msg >> nonce;
+      msg >> hash2;
+      msg >> hash1;
+      msg >> difficulty;
+
+      PLOG_INFO << "[Client] Got Validation Request for file: " << filename;
+
+      // TODO: find solution
+
+      tmpMsgOut.header.type = CLIENT_VALIDATION_RESPONSE;
+      tmpMsgOut.header.size = 0;
+      tmpMsgOut.header.remote = socket.local_endpoint();
+
+      tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
+      tmpMsgOut << hash1;
+      tmpMsgOut << nonce;
+      tmpMsgOut << MAX_WINDOW_SIZE;
+      tmpMsgOut << filename;
+
+      // TODO: set timeout
+      send_msg(tmpMsgOut);
+   }
+   // ------------------------------------------------------------------------
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
    {
       auto end = NOW;
 
-      size_t filenameSize = msg.header.size - (sizeof(ServerMsgType) + sizeof(ConnectionID) + sizeof(uint32_t) + SHA256_SIZE + 1);
+      size_t filenameSize = msg.header.size - SERVER_INITIAL_RESPONSE_META_DATA;
 
       ConnectionID connectionId;
-      uint32_t fileSize;
+      uint64_t fileSize;
       unsigned char sha256[SHA256_SIZE];
       std::string filename(filenameSize, '\0');
 
@@ -175,7 +208,7 @@ namespace rft
       msg >> fileSize;
       msg >> connectionId;
 
-      auto duration = boost::asio::chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
+      auto duration = chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
       ++rttCount;
       rttCurrent = duration.count();
       rttTotal += rttCurrent;
@@ -217,7 +250,7 @@ namespace rft
       auto& conn = search->second;
 
       if (conn.shouldMeasureTime) {
-         auto duration = boost::asio::chrono::duration_cast<timeunit>(end - conn.tp);
+         auto duration = chrono::duration_cast<timeunit>(end - conn.tp);
          ++rttCount;
          rttCurrent = duration.count();
          rttTotal += rttCurrent;
@@ -245,7 +278,7 @@ namespace rft
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = conn.window.chunks[i].size();
             conn.file.write(reinterpret_cast<char*>(conn.window.chunks[i].data()), bytes);
-            // TODO: check for badbit and send no space left error message
+            // TODO: check for badbit (!conn.file) and send no space left error message
             bytesWritten += bytes;
          }
          conn.bytesWritten += bytesWritten;
@@ -282,12 +315,12 @@ namespace rft
    {
       set_timeout_for_transmission(connectionId);
 
-      tmpMsgOut.header.type = ClientMsgType::TRANSMISSION_REQUEST;
+      tmpMsgOut.header.type = TRANSMISSION_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       auto& conn = connections.at(connectionId);
-      tmpMsgOut << ClientMsgType::TRANSMISSION_REQUEST;
+      tmpMsgOut << TRANSMISSION_REQUEST;
       tmpMsgOut << connectionId;
       tmpMsgOut << conn.window.id;
       tmpMsgOut << rttCurrent;
@@ -307,7 +340,7 @@ namespace rft
    {
       set_timeout_for_retransmission(connectionId);
 
-      tmpMsgOut.header.type = ClientMsgType::RETRANSMISSION_REQUEST;
+      tmpMsgOut.header.type = RETRANSMISSION_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
@@ -316,7 +349,7 @@ namespace rft
       Bitfield bitfield(conn.window.currentSize);
       bitfield.from(conn.window.sequenceNumbers);
 
-      tmpMsgOut << ClientMsgType::RETRANSMISSION_REQUEST;
+      tmpMsgOut << RETRANSMISSION_REQUEST;
       tmpMsgOut << connectionId;
       tmpMsgOut << conn.window.id;
       tmpMsgOut << bitfield.bitfield;
@@ -331,11 +364,11 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::send_finish_msg(ConnectionID connectionId)
    {
-      tmpMsgOut.header.type = ClientMsgType::FINISH;
+      tmpMsgOut.header.type = CLIENT_FINISH_MESSAGE;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << ClientMsgType::FINISH;
+      tmpMsgOut << CLIENT_FINISH_MESSAGE;
       tmpMsgOut << connectionId;
 
       send_msg(tmpMsgOut);
@@ -375,7 +408,7 @@ namespace rft
    void Client::set_timeout_for_transmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(timeunit(rttTotal/ rttCount * TIMEOUT));
+      conn.t.expires_after(timeunit(rttTotal / rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
@@ -405,7 +438,7 @@ namespace rft
    void Client::set_timeout_for_retransmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
-      conn.t.expires_after(timeunit(rttTotal/ rttCount * TIMEOUT));
+      conn.t.expires_after(timeunit(rttTotal / rttCount * TIMEOUT));
       conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
