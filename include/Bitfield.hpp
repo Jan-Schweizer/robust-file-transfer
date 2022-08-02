@@ -21,12 +21,11 @@ namespace rft
       class BitReference
       {
          friend class Bitfield;
-         // TODO: replace Bitfield& with char& and loose the byte
-         Bitfield& bitfield;
-         uint16_t byte;
+
+         unsigned char& byte;
          uint16_t offset;
 
-         BitReference(Bitfield& bitfield, uint16_t byte, uint16_t offset);
+         BitReference(unsigned char& byte, uint16_t offset);
 
        public:
          explicit operator bool() const;

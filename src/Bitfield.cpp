@@ -13,7 +13,7 @@ namespace rft
    {
       uint16_t byte = idx / 8;
       uint16_t offset = idx % 8;
-      return {*this, byte, offset};
+      return {bitfield[byte], offset};
    }
    // ------------------------------------------------------------------------
    bool Bitfield::operator[](uint16_t idx) const
@@ -37,12 +37,12 @@ namespace rft
       std::memcpy(bitfield.data(), payload, bitfield.size());
    }
    // ------------------------------------------------------------------------
-   Bitfield::BitReference::BitReference(Bitfield& bitfield, uint16_t byte, uint16_t offset)
-       : bitfield(bitfield), byte(byte), offset(offset) {}
+   Bitfield::BitReference::BitReference(unsigned char& byte, uint16_t offset) : byte(byte), offset(offset)
+   {}
    // ------------------------------------------------------------------------
    Bitfield::BitReference::operator bool() const
    {
-      unsigned char mask = bitfield.bitfield[byte];
+      unsigned char mask = byte;
       mask &= 1UL << (8 - offset - 1);
       return static_cast<bool>(mask >> (8 - offset - 1));
    }
@@ -52,11 +52,11 @@ namespace rft
       unsigned char mask;
       if (b) {
          mask = 1UL << (8 - offset - 1);
-         bitfield.bitfield[byte] |= mask;
+         byte |= mask;
          return *this;
       } else {
          mask = ~(1UL << (8 - offset - 1));
-         bitfield.bitfield[byte] &= mask;
+         byte &= mask;
          return *this;
       }
    }
