@@ -6,7 +6,7 @@ namespace rft
 {
    Bitfield::Bitfield(uint16_t size) : size(size)
    {
-      bitfield.resize((size + (8 - 1)) / 8);
+      bitfield.resize((size + (8 - 1)) / 8, 0);
    }
    // ------------------------------------------------------------------------
    Bitfield::BitReference Bitfield::operator[](uint16_t idx)

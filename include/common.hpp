@@ -24,8 +24,8 @@ namespace rft
    const uint16_t CHUNK_SIZE = 512;
    /// Size of the SHA256 hash
    const uint8_t SHA256_SIZE = 32;
-   /// Maximum receiving chunk size of a client
-   const uint16_t MAX_WINDOW_SIZE = 64;
+   /// Maximum throughput a client can handle in MB/s
+   const uint16_t MAX_THROUGHPUT = 1;
    /// Size of the Server Validation Request meta data (without filename hence)
    const uint16_t SERVER_VALIDATION_REQUEST_META_DATA_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + SHA256_SIZE + SHA256_SIZE + sizeof(uint32_t) + 1;
    /// Size of the Client Validation Response meta data (without filename hence)

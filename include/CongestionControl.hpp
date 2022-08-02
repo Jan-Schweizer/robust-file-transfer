@@ -16,16 +16,16 @@ namespace rft
          CC_AVOIDANCE
       };
 
-      explicit CongestionControl(uint16_t maxWindowSize) : maxWindowSize(maxWindowSize) {}
+      explicit CongestionControl(uint16_t maxThroughput) : maxThroughput(maxThroughput) {}
 
       Phase phase = Phase::CC_NORMAL;
       const double BETA = 0.5;
       uint32_t rttMax = 0;
       uint32_t rttCurrent = 0;
-      uint32_t maxWindowSize;
+      uint16_t maxThroughput;
       uint16_t cwnd = 1;
 
-      uint16_t updateCWND(uint32_t rrt);
+      uint16_t getNextWindowSize(uint32_t rrt);
    };
 }// namespace rft
 // ------------------------------------------------------------------------

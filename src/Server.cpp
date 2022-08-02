@@ -43,7 +43,7 @@ namespace rft
    void Server::handle_receive(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         PLOG_INFO << "[Server] Received message";
+         // PLOG_INFO << "[Server] Received message";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Server] Error on Receive: " + error.to_string();
@@ -61,7 +61,7 @@ namespace rft
    void Server::handle_send(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         PLOG_INFO << "[Server] Send message";
+         // PLOG_INFO << "[Server] Send message";
       } else {
          PLOG_WARNING << "[Server] Error on Send: " + error.to_string();
       }
@@ -154,17 +154,15 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::handle_validation_response(Message<ClientMsgType>& msg)
    {
-      hexdump(msg.packet, msg.header.size);
-
       uint32_t filenameSize = msg.header.size - CLIENT_VALIDATION_RESPONSE_META_DATA_SIZE;
 
       unsigned char hash1[SHA256_SIZE];
       uint32_t nonce;
-      uint16_t maxWindowSize;
+      uint16_t maxThroughput;
       std::string filename(filenameSize, '\0');
 
       msg >> filename;
-      msg >> maxWindowSize;
+      msg >> maxThroughput;
       msg >> nonce;
       msg >> hash1;
 
@@ -183,9 +181,9 @@ namespace rft
       uint64_t fileSize = std::filesystem::file_size(filename);
       unsigned char sha256[SHA256_SIZE];
       compute_SHA256(filename, sha256);
-      Window window(maxWindowSize);
+      Window window(maxThroughput * 1024 * 1024 / CHUNK_SIZE);
 
-      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxWindowSize, std::move(window), io_context}});
+      connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxThroughput, std::move(window), io_context}});
 
       tmpMsgOut.header.type = SERVER_INITIAL_RESPONSE;
       tmpMsgOut.header.size = 0;
@@ -230,9 +228,10 @@ namespace rft
       tmpMsgOut.header.type = PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
-      // In AVOIDANCE, the window is updated before the transmission
+      conn.window.currentSize = conn.cc.getNextWindowSize(rttCurrent);
+
       if (conn.cc.phase == CongestionControl::Phase::CC_AVOIDANCE) {
-         conn.window.currentSize = conn.cc.updateCWND(rttCurrent);
+         conn.cc.phase = CongestionControl::Phase::CC_NORMAL;
       }
 
       // set offset into file
@@ -262,13 +261,6 @@ namespace rft
 
          set_timeout(connectionId);
          send_msg_to_client(tmpMsgOut, msg.header.remote);
-      }
-
-      // In NORMAL, the window is updated after the transmission
-      if (conn.cc.phase == CongestionControl::Phase::CC_AVOIDANCE) {
-         conn.cc.phase = CongestionControl::Phase::CC_NORMAL;
-      } else {
-         conn.window.currentSize = conn.cc.updateCWND(rttCurrent);
       }
    }
    // ------------------------------------------------------------------------

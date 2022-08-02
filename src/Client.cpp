@@ -82,7 +82,7 @@ namespace rft
    void Client::handle_send(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         PLOG_INFO << "[Client] Send message";
+         // PLOG_INFO << "[Client] Send message";
       } else {
          PLOG_WARNING << "[Client] Error on Send: " + error.to_string();
       }
@@ -99,7 +99,7 @@ namespace rft
    void Client::handle_receive(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         PLOG_INFO << "[Client] Received message";
+         // PLOG_INFO << "[Client] Received message";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Client] Error on Receive: " + error.to_string();
@@ -185,7 +185,7 @@ namespace rft
       tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
       tmpMsgOut << hash1;
       tmpMsgOut << nonce;
-      tmpMsgOut << MAX_WINDOW_SIZE;
+      tmpMsgOut << MAX_THROUGHPUT;
       tmpMsgOut << filename;
 
       // TODO: set timeout
@@ -218,7 +218,7 @@ namespace rft
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 
       std::string dest = fileDest + "/" + filename;
-      Window window{MAX_WINDOW_SIZE};
+      Window window{MAX_THROUGHPUT * 1024 * 1024 / CHUNK_SIZE};
       connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window), io_context}});
 
       request_transmission(connectionId);
@@ -268,9 +268,8 @@ namespace rft
 
       conn.window.store_chunk(chunk, sequenceNumber);
       conn.window.currentSize = currentWindowSize;
-      ++conn.chunksReceivedInWindow;
 
-      if (conn.chunksReceivedInWindow == conn.window.currentSize) {
+      if (conn.window.isWindowComplete()) {
          // TODO: maybe extract this to separate function
          conn.t.cancel();
 
@@ -289,7 +288,7 @@ namespace rft
                    << "(" << bytesWritten << "B)"
                    << " to disk";
 
-         if (conn.bytesWritten == conn.fileSize) {
+         if (conn.isFileTransferComplete()) {
             unsigned char sha256[SHA256_SIZE];
             compute_SHA256(conn.filename, sha256);
             if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
@@ -326,7 +325,7 @@ namespace rft
       tmpMsgOut << rttCurrent;
       tmpMsgOut << conn.chunksWritten;
 
-      conn.chunksReceivedInWindow = 0;
+      conn.window.reset();
 
       PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.filename;
 

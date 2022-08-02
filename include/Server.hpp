@@ -19,8 +19,8 @@ namespace rft
       {
          friend class Server;
 
-         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint16_t maxWindowSize, Window window, boost::asio::io_context& io_context)
-             : client(std::move(client)), file(std::move(file)), window(std::move(window)), cc(maxWindowSize), t(io_context)
+         Connection(boost::asio::ip::udp::endpoint client, std::ifstream file, uint16_t maxThroughput, Window window, boost::asio::io_context& io_context)
+             : client(std::move(client)), file(std::move(file)), window(std::move(window)), cc(maxThroughput), t(io_context)
          {}
 
          boost::asio::ip::udp::endpoint client;

@@ -37,7 +37,7 @@ namespace rft
             file.open(this->filename, std::ios::binary | std::ios::trunc);
             if (!file) {
                PLOG_ERROR << "[Client] Could not open file for writing";
-               // TODO: find a way to communicate this error and terminate file transfer
+               // TODO: find a way to communicate this error and terminate file transfer (throw exception)
             }
          }
 
@@ -45,16 +45,20 @@ namespace rft
          std::ofstream file;
          uint64_t fileSize = 0;
          uint32_t bytesWritten = 0;
+         uint32_t chunksWritten = 0;
          unsigned char sha256[SHA256_SIZE]{'\0'};
          Window window;
-         uint32_t chunksWritten = 0;
-         uint16_t chunksReceivedInWindow = 0;
 
          boost::asio::steady_timer t;
          timepoint tp;
          bool shouldMeasureTime = true;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;
+
+         bool isFileTransferComplete() const
+         {
+            return bytesWritten == fileSize;
+         }
       };
       // ------------------------------------------------------------------------
 

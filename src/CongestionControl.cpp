@@ -5,14 +5,19 @@
 namespace rft
 {
    // ------------------------------------------------------------------------
-   uint16_t CongestionControl::updateCWND(uint32_t rrt)
+   uint16_t CongestionControl::getNextWindowSize(uint32_t rrt)
    {
       rttCurrent = rrt;
       rttMax = std::max(rttMax, rttCurrent);
+
+      uint16_t maxMBps = chrono::duration_cast<seconds>(timeunit(rttCurrent).count() * chrono::duration_cast<timeunit>(seconds(maxThroughput))).count();
+      maxMBps = std::min(maxMBps, maxThroughput);
+      uint16_t rwnd = maxMBps * 1024 * 1024 / CHUNK_SIZE;
+
       switch (phase) {
          case Phase::CC_NORMAL: {
             auto wwf = static_cast<uint32_t>(std::sqrt(rttMax / rttCurrent * cwnd));
-            cwnd = std::min(cwnd + wwf / cwnd, maxWindowSize);
+            cwnd = cwnd + wwf / cwnd;
             break;
          }
          case Phase::CC_AVOIDANCE:
@@ -20,7 +25,7 @@ namespace rft
             break;
       }
 
-      return cwnd;
+      return std::min(cwnd, rwnd);
    }
 }// namespace rft
 // ------------------------------------------------------------------------
