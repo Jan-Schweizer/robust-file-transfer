@@ -141,8 +141,10 @@ namespace rft
    void Client::dispatch_msg(Message<ServerMsgType>& msg)
    {
       switch (msg.header.type) {
+         // TODO: Think about which operation should be done on the main thread and which on a separate thread
          case SERVER_VALIDATION_REQUEST:
-            handle_validation_request(msg);
+            // finding a solution is a time-consuming operation, do not block the main thread for this (otherwise timeouts for file transfers that are already in progress will fire)
+            post(boost::bind(&Client::handle_validation_request, this, msg));
             break;
          case SERVER_INITIAL_RESPONSE:
             handle_initial_response(msg);
@@ -403,6 +405,8 @@ namespace rft
 
       send_msg(tmpMsgOut);
    }
+   // ------------------------------------------------------------------------
+   // TODO: think about a Timer class that can register a timeout with a generic callback function
    // ------------------------------------------------------------------------
    void Client::set_timeout_for_file_request(std::string& filename)
    {

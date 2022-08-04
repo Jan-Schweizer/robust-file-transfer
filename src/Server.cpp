@@ -101,11 +101,13 @@ namespace rft
    void Server::dispatch_msg(Message<ClientMsgType>& msg)
    {
       switch (msg.header.type) {
+         // TODO: Think about which operation should be done on the main thread and which on a separate thread
          case FILE_REQUEST:
             handle_file_request(msg);
             break;
          case CLIENT_VALIDATION_RESPONSE:
-            handle_validation_response(msg);
+            // validating the response is a time-consuming operation, do not block the main thread for this (otherwise timeouts for file transfers that are already in progress will fire)
+            post(boost::bind(&Server::handle_validation_response, this, msg));
             break;
          case TRANSMISSION_REQUEST:
             handle_transmission_request(msg);
