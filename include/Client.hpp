@@ -17,10 +17,10 @@ namespace rft
       {
          friend class Client;
 
-         FileRequest(std::string& filename, boost::asio::io_context& io_context)
-             : filename(filename), t(io_context) {}
+         explicit FileRequest(boost::asio::io_context& io_context) : t(io_context) {}
 
-         std::string& filename;
+         uint32_t nonce = 0;
+         unsigned char hash1Solution[SHA256_SIZE]{'\0'};
          boost::asio::steady_timer t;
          timepoint tp;
          uint8_t retryCounter = 1;
@@ -91,6 +91,7 @@ namespace rft
       void decode_msg(size_t bytes_transferred);
 
       void set_timeout_for_file_request(std::string& filename);
+      void set_timeout_for_validation_response(std::string& filename);
       void set_timeout_for_transmission(ConnectionID connectionId);
       void set_timeout_for_retransmission(ConnectionID connectionId);
 
@@ -98,6 +99,7 @@ namespace rft
       void handle_initial_response(Message<ServerMsgType>& msg);
       void handle_payload_packet(Message<ServerMsgType>& msg);
       void handle_file_request_timeout(std::string& filename);
+      void handle_validation_response_timeout(std::string& filename);
       void handle_transmission_timeout(ConnectionID connectionId);
       void handle_retransmission_timeout(ConnectionID connectionId);
 

@@ -18,6 +18,7 @@ namespace rft
    using micros = chrono::microseconds;
    using millis = chrono::milliseconds;
    using seconds = chrono::seconds;
+   using minutes = chrono::minutes;
    using timeunit = micros;
 
    /// Size of a data chunk from the file

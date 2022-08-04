@@ -128,7 +128,6 @@ namespace rft
    {
       uint32_t filenameSize = msg.header.size - (sizeof(ClientMsgType) + 1);
 
-      uint8_t difficulty = 0;
       unsigned char hash1[SHA256_SIZE];
       unsigned char hash2[SHA256_SIZE];
       uint32_t nonce = chrono::duration_cast<seconds>(NOW.time_since_epoch()).count();
@@ -136,12 +135,26 @@ namespace rft
 
       msg >> filename;
 
+      std::string str(std::to_string(nonce) + filename + SERVER_SECRET);
+      compute_SHA256(reinterpret_cast<unsigned char*>(str.data()), str.size(), hash1);
+      compute_SHA256(hash1, SHA256_SIZE, hash2);
+
+      // mask difficulty-number of bits from hash1
+      uint8_t remaining = DIFFICULTY;
+      uint8_t byte = 0;
+      while (remaining >= 8) {
+         hash1[byte] = 0;
+         ++byte;
+         remaining -= 8;
+      }
+      hash1[byte] &= 0b11111111 >> remaining;
+
       tmpMsgOut.header.type = SERVER_VALIDATION_REQUEST;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       tmpMsgOut << SERVER_VALIDATION_REQUEST;
-      tmpMsgOut << difficulty;
+      tmpMsgOut << DIFFICULTY;
       tmpMsgOut << hash1;
       tmpMsgOut << hash2;
       tmpMsgOut << nonce;
@@ -157,6 +170,7 @@ namespace rft
       uint32_t filenameSize = msg.header.size - CLIENT_VALIDATION_RESPONSE_META_DATA_SIZE;
 
       unsigned char hash1[SHA256_SIZE];
+      unsigned char originalHash1[SHA256_SIZE];
       uint32_t nonce;
       uint16_t maxThroughput;
       std::string filename(filenameSize, '\0');
@@ -166,7 +180,14 @@ namespace rft
       msg >> nonce;
       msg >> hash1;
 
-      // TODO: verify solution
+      // verify solution
+      std::string str(std::to_string(nonce) + filename + SERVER_SECRET);
+      compute_SHA256(reinterpret_cast<unsigned char*>(str.data()), str.size(), originalHash1);
+      if (std::strncmp(reinterpret_cast<char*>(originalHash1), reinterpret_cast<char*>(hash1), SHA256_SIZE) != 0) {
+         PLOG_WARNING << "[Server] Client did not pass validation for file: " << filename;
+         // TODO: send back error message
+         return;
+      }
 
       PLOG_INFO << "[Server] Client has passed validation for file: " << filename;
 
@@ -180,7 +201,7 @@ namespace rft
       ConnectionID connectionId = connectionIdPool++;
       uint64_t fileSize = std::filesystem::file_size(filename);
       unsigned char sha256[SHA256_SIZE];
-      compute_SHA256(filename, sha256);
+      compute_file_SHA256(filename, sha256);
       Window window(maxThroughput * 1024 * 1024 / CHUNK_SIZE);
 
       connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxThroughput, std::move(window), io_context}});

@@ -3,6 +3,7 @@
 #include "Bitfield.hpp"
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
+#include <boost/multiprecision/cpp_int.hpp>
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -63,7 +64,7 @@ namespace rft
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
 
-      fileRequests.insert({filename, FileRequest{filename, io_context}});
+      fileRequests.insert({filename, FileRequest{io_context}});
 
       set_timeout_for_file_request(filename);
       fileRequests.at(filename).tp = NOW;
@@ -161,6 +162,10 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_validation_request(Message<ServerMsgType>& msg)
    {
+      using namespace boost::multiprecision;
+
+      auto end = NOW;
+
       uint32_t filenameSize = msg.header.size - SERVER_VALIDATION_REQUEST_META_DATA_SIZE;
       uint8_t difficulty;
       unsigned char hash1[SHA256_SIZE];
@@ -174,21 +179,47 @@ namespace rft
       msg >> hash1;
       msg >> difficulty;
 
+      auto duration = chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
+      ++rttCount;
+      rttCurrent = duration.count();
+      rttTotal += rttCurrent;
+
       PLOG_INFO << "[Client] Got Validation Request for file: " << filename;
 
-      // TODO: find solution
+      // find a solution by converting to and from 256 wide ints
+      unsigned char candidate[SHA256_SIZE];
+      unsigned char candidate_hash[SHA256_SIZE];
+      uint256_t bigint;
+      import_bits(bigint, std::begin(hash1), std::end(hash1));
+      for (uint256_t i = 0, one256 = 1; i < one256 << difficulty; ++i) {
+         uint256_t tmp = bigint;
+         tmp |= i << 256 - difficulty;
+         export_bits(tmp, std::begin(candidate), 8);
+         compute_SHA256(candidate, SHA256_SIZE, candidate_hash);
+
+         if (std::strncmp(reinterpret_cast<char*>(hash2), reinterpret_cast<char*>(candidate_hash), SHA256_SIZE) == 0) {
+            // found a solution
+            auto& fr = fileRequests.at(filename);
+            std::memcpy(fr.hash1Solution, candidate, SHA256_SIZE);
+            fr.nonce = nonce;
+            break;
+         }
+      }
 
       tmpMsgOut.header.type = CLIENT_VALIDATION_RESPONSE;
       tmpMsgOut.header.size = 0;
       tmpMsgOut.header.remote = socket.local_endpoint();
 
       tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
-      tmpMsgOut << hash1;
+      tmpMsgOut << candidate;
       tmpMsgOut << nonce;
       tmpMsgOut << MAX_THROUGHPUT;
       tmpMsgOut << filename;
 
-      // TODO: set timeout
+      fileRequests.at(filename).retryCounter = 1;
+      set_timeout_for_validation_response(filename);
+      fileRequests.at(filename).tp = NOW;
+
       send_msg(tmpMsgOut);
    }
    // ------------------------------------------------------------------------
@@ -290,7 +321,7 @@ namespace rft
 
          if (conn.isFileTransferComplete()) {
             unsigned char sha256[SHA256_SIZE];
-            compute_SHA256(conn.filename, sha256);
+            compute_file_SHA256(conn.filename, sha256);
             if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
                PLOG_ERROR << "[Client] File " << conn.filename << " was not transferred successfully (wrong SHA256 checksum)\nPlease request file again!";
                connections.erase(connectionId);
@@ -377,7 +408,7 @@ namespace rft
    {
       auto& fr = fileRequests.at(filename);
       // Set a long timeout for a file request (calculation of SHA256 can take a while)
-      fr.t.expires_after(boost::asio::chrono::minutes(10));
+      fr.t.expires_after(minutes(10));
       fr.t.async_wait(boost::bind(&Client::handle_file_request_timeout, this, filename));
    }
    // ------------------------------------------------------------------------
@@ -400,6 +431,49 @@ namespace rft
             PLOG_INFO << "[Client] Repeating request for file: " << filename;
             ++fr.retryCounter;
             request_file(filename);
+         }
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::set_timeout_for_validation_response(std::string& filename)
+   {
+      auto& fr = fileRequests.at(filename);
+      // Set a reasonably long timeout to validate the solution
+      fr.t.expires_after(minutes(1));
+      fr.t.async_wait(boost::bind(&Client::handle_validation_response_timeout, this, filename));
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_validation_response_timeout(std::string& filename)
+   {
+      auto search = fileRequests.find(filename);
+      if (search != fileRequests.end()) {
+         auto& fr = search->second;
+
+         if (fr.retryCounter >= fr.maxRetries) {
+            PLOG_ERROR << "[Client] Sent validation response for " << filename << " multiple times without success.";
+            fileRequests.erase(filename);
+            done = fileRequests.empty() && connections.empty();
+            // wake the main thread that is waiting on the msqQueue condition variable
+            msgQueue.wake();
+            return;
+         }
+
+         if (fr.t.expiry() <= steady_timer::clock_type::now()) {
+            PLOG_INFO << "[Client] Repeating request for file: " << filename;
+            ++fr.retryCounter;
+
+            tmpMsgOut.header.type = CLIENT_VALIDATION_RESPONSE;
+            tmpMsgOut.header.size = 0;
+            tmpMsgOut.header.remote = socket.local_endpoint();
+
+            tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
+            tmpMsgOut << fr.hash1Solution;
+            tmpMsgOut << fr.nonce;
+            tmpMsgOut << MAX_THROUGHPUT;
+            tmpMsgOut << filename;
+
+            set_timeout_for_validation_response(filename);
+            send_msg(tmpMsgOut);
          }
       }
    }
