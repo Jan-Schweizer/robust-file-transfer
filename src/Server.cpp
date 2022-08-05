@@ -43,7 +43,7 @@ namespace rft
    void Server::handle_receive(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         // PLOG_INFO << "[Server] Received message";
+         // PLOG_VERBOSE << "[Server] Received message";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Server] Error on Receive: " + error.to_string();
@@ -61,7 +61,7 @@ namespace rft
    void Server::handle_send(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         // PLOG_INFO << "[Server] Send message";
+         // PLOG_VERBOSE << "[Server] Send message";
       } else {
          PLOG_WARNING << "[Server] Error on Send: " + error.to_string();
       }
@@ -246,7 +246,7 @@ namespace rft
       conn.client = msg.header.remote;
       conn.window.id = windowId;
 
-      PLOG_INFO << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << chunkIdx;
+      PLOG_VERBOSE << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << chunkIdx;
 
       tmpMsgOut.header.type = PAYLOAD;
       tmpMsgOut.header.remote = socket.local_endpoint();

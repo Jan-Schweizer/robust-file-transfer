@@ -83,7 +83,7 @@ namespace rft
    void Client::handle_send(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         // PLOG_INFO << "[Client] Send message";
+         // PLOG_VERBOSE << "[Client] Send message";
       } else {
          PLOG_WARNING << "[Client] Error on Send: " + error.to_string();
       }
@@ -100,7 +100,7 @@ namespace rft
    void Client::handle_receive(const boost::system::error_code& error, size_t bytes_transferred)
    {
       if (!error) {
-         // PLOG_INFO << "[Client] Received message";
+         // PLOG_VERBOSE << "[Client] Received message";
          enqueue_msg(bytes_transferred);
       } else {
          PLOG_WARNING << "[Client] Error on Receive: " + error.to_string();
@@ -317,9 +317,9 @@ namespace rft
          conn.chunksWritten += currentWindowSize;
          conn.file.flush();
 
-         PLOG_INFO << "[Client] Written " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
-                   << "(" << bytesWritten << "B)"
-                   << " to disk";
+         PLOG_VERBOSE << "[Client] Written " << currentWindowSize << " chunk" << ((currentWindowSize > 1) ? "s" : "")
+                      << "(" << bytesWritten << "B)"
+                      << " to disk";
 
          if (conn.isFileTransferComplete()) {
             unsigned char sha256[SHA256_SIZE];
@@ -360,7 +360,7 @@ namespace rft
 
       conn.window.reset();
 
-      PLOG_INFO << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.filename;
+      PLOG_VERBOSE << "[Client] Requesting chunks at index: " << conn.chunksWritten << " for file " << conn.filename;
 
       conn.shouldMeasureTime = true;
       conn.tp = NOW;
