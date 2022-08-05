@@ -34,7 +34,7 @@ namespace rft
    void Server::receive_msg()
    {
       socket.async_receive_from(
-          buffer(tmpMsgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
+          buffer(msgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
           boost::bind(&Server::handle_receive, this,
                       boost::asio::placeholders::error,
                       boost::asio::placeholders::bytes_transferred));
@@ -70,20 +70,20 @@ namespace rft
    void Server::enqueue_msg(size_t bytes_transferred)
    {
       decode_msg(bytes_transferred);
-      msgQueue.push_back(tmpMsgIn);
+      msgQueue.push_back(msgIn);
 
       receive_msg();
    }
    // ------------------------------------------------------------------------
    void Server::decode_msg(size_t bytes_transferred)
    {
-      auto& msg = tmpMsgIn.packet;
+      auto& msg = msgIn.packet;
 
       auto msgType = static_cast<ClientMsgType>(msg[0]);
 
-      tmpMsgIn.header.type = msgType;
-      tmpMsgIn.header.size = bytes_transferred;
-      tmpMsgIn.header.remote = remote_endpoint;
+      msgIn.header.type = msgType;
+      msgIn.header.size = bytes_transferred;
+      msgIn.header.remote = remote_endpoint;
    }
    // ------------------------------------------------------------------------
    void Server::process_msgs()
@@ -151,20 +151,21 @@ namespace rft
       }
       hash1[byte] &= 0b11111111 >> remaining;
 
-      tmpMsgOut.header.type = SERVER_VALIDATION_REQUEST;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ServerMsgType> msgOut;
+      msgOut.header.type = SERVER_VALIDATION_REQUEST;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << SERVER_VALIDATION_REQUEST;
-      tmpMsgOut << DIFFICULTY;
-      tmpMsgOut << hash1;
-      tmpMsgOut << hash2;
-      tmpMsgOut << nonce;
-      tmpMsgOut << filename;
+      msgOut << SERVER_VALIDATION_REQUEST;
+      msgOut << DIFFICULTY;
+      msgOut << hash1;
+      msgOut << hash2;
+      msgOut << nonce;
+      msgOut << filename;
 
       PLOG_INFO << "[Server] Client requesting file: " << filename;
 
-      send_msg_to_client(tmpMsgOut, msg.header.remote);
+      send_msg_to_client(msgOut, msg.header.remote);
    }
    // ------------------------------------------------------------------------
    void Server::handle_validation_response(Message<ClientMsgType>& msg)
@@ -208,18 +209,19 @@ namespace rft
 
       connections.insert({connectionId, Connection{msg.header.remote, std::move(file), maxThroughput, std::move(window), io_context}});
 
-      tmpMsgOut.header.type = SERVER_INITIAL_RESPONSE;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ServerMsgType> msgOut;
+      msgOut.header.type = SERVER_INITIAL_RESPONSE;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << SERVER_INITIAL_RESPONSE;
-      tmpMsgOut << connectionId;
-      tmpMsgOut << fileSize;
-      tmpMsgOut << sha256;
-      tmpMsgOut << filename;
+      msgOut << SERVER_INITIAL_RESPONSE;
+      msgOut << connectionId;
+      msgOut << fileSize;
+      msgOut << sha256;
+      msgOut << filename;
 
       set_timeout(connectionId);
-      send_msg_to_client(tmpMsgOut, msg.header.remote);
+      send_msg_to_client(msgOut, msg.header.remote);
    }
    // ------------------------------------------------------------------------
    void Server::handle_transmission_request(Message<ClientMsgType>& msg)
@@ -248,8 +250,9 @@ namespace rft
 
       PLOG_VERBOSE << "[Server] Transmission Request for connection ID " << connectionId << " at chunk index " << chunkIdx;
 
-      tmpMsgOut.header.type = PAYLOAD;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ServerMsgType> msgOut;
+      msgOut.header.type = PAYLOAD;
+      msgOut.header.remote = socket.local_endpoint();
 
       conn.window.currentSize = conn.cc.getNextWindowSize(rttCurrent);
 
@@ -271,19 +274,19 @@ namespace rft
             conn.window.currentSize = i + 1;
          }
 
-         tmpMsgOut.header.size = 0;
+         msgOut.header.size = 0;
 
-         tmpMsgOut << PAYLOAD;
-         tmpMsgOut << connectionId;
-         tmpMsgOut << conn.window.id;
-         tmpMsgOut << conn.window.currentSize;
-         tmpMsgOut << i;
-         tmpMsgOut << chunk;
+         msgOut << PAYLOAD;
+         msgOut << connectionId;
+         msgOut << conn.window.id;
+         msgOut << conn.window.currentSize;
+         msgOut << i;
+         msgOut << chunk;
 
          conn.window.store_chunk(chunk, i);
 
          set_timeout(connectionId);
-         send_msg_to_client(tmpMsgOut, msg.header.remote);
+         send_msg_to_client(msgOut, msg.header.remote);
       }
    }
    // ------------------------------------------------------------------------
@@ -321,22 +324,23 @@ namespace rft
       Bitfield bitfield(conn.window.currentSize);
       bitfield.from(payload.data());
 
-      tmpMsgOut.header.type = PAYLOAD;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ServerMsgType> msgOut;
+      msgOut.header.type = PAYLOAD;
+      msgOut.header.remote = socket.local_endpoint();
 
       for (uint16_t i = 0; i < conn.window.currentSize; ++i) {
          if (!bitfield[i]) {
-            tmpMsgOut.header.size = 0;
+            msgOut.header.size = 0;
 
-            tmpMsgOut << PAYLOAD;
-            tmpMsgOut << connectionId;
-            tmpMsgOut << conn.window.id;
-            tmpMsgOut << conn.window.currentSize;
-            tmpMsgOut << i;
-            tmpMsgOut << conn.window.chunks[i];
+            msgOut << PAYLOAD;
+            msgOut << connectionId;
+            msgOut << conn.window.id;
+            msgOut << conn.window.currentSize;
+            msgOut << i;
+            msgOut << conn.window.chunks[i];
 
             set_timeout(connectionId);
-            send_msg_to_client(tmpMsgOut, msg.header.remote);
+            send_msg_to_client(msgOut, msg.header.remote);
          }
       }
    }

@@ -126,8 +126,7 @@ namespace rft
       size_t rttCount = 1;
       uint32_t rttCurrent = 0;
 
-      Message<ServerMsgType> tmpMsgIn{};
-      Message<ClientMsgType> tmpMsgOut{};
+      Message<ServerMsgType> msgIn{};
       MessageQueue<Message<ServerMsgType>> msgQueue;
 
       bool done = false;

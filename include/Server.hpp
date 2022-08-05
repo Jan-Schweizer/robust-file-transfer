@@ -70,10 +70,9 @@ namespace rft
       boost::asio::ip::udp::endpoint remote_endpoint;
 
       std::unordered_map<ConnectionID, Connection> connections;
-      ConnectionID connectionIdPool = 0;
+      std::atomic<ConnectionID> connectionIdPool = 0;
 
-      Message<ClientMsgType> tmpMsgIn{};
-      Message<ServerMsgType> tmpMsgOut{};
+      Message<ClientMsgType> msgIn{};
       MessageQueue<Message<ClientMsgType>> msgQueue;
 
       const size_t timeoutInMin = 3;

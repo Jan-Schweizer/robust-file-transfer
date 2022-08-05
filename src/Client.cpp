@@ -55,12 +55,13 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::request_file(std::string& filename)
    {
-      tmpMsgOut.header.type = FILE_REQUEST;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ClientMsgType> msgOut;
+      msgOut.header.type = FILE_REQUEST;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << FILE_REQUEST;
-      tmpMsgOut << filename;
+      msgOut << FILE_REQUEST;
+      msgOut << filename;
 
       PLOG_INFO << "[Client] Requesting file: " << filename;
 
@@ -69,7 +70,7 @@ namespace rft
       set_timeout_for_file_request(filename);
       fileRequests.at(filename).tp = NOW;
 
-      send_msg(tmpMsgOut);
+      send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
    void Client::send_msg(Message<ClientMsgType> msg)
@@ -91,7 +92,7 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::receive_msg()
    {
-      socket.async_receive_from(buffer(tmpMsgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
+      socket.async_receive_from(buffer(msgIn.packet, MAX_PACKET_SIZE), remote_endpoint,
                                 boost::bind(&Client::handle_receive, this,
                                             boost::asio::placeholders::error,
                                             boost::asio::placeholders::bytes_transferred));
@@ -110,20 +111,20 @@ namespace rft
    void Client::enqueue_msg(size_t bytes_transferred)
    {
       decode_msg(bytes_transferred);
-      msgQueue.push_back(tmpMsgIn);
+      msgQueue.push_back(msgIn);
 
       receive_msg();
    }
    // ------------------------------------------------------------------------
    void Client::decode_msg(size_t bytes_transferred)
    {
-      auto& msg = tmpMsgIn.packet;
+      auto& msg = msgIn.packet;
 
       auto msgType = static_cast<ServerMsgType>(msg[0]);
 
-      tmpMsgIn.header.type = msgType;
-      tmpMsgIn.header.size = bytes_transferred;
-      tmpMsgIn.header.remote = remote_endpoint;
+      msgIn.header.type = msgType;
+      msgIn.header.size = bytes_transferred;
+      msgIn.header.remote = remote_endpoint;
    }
    // ------------------------------------------------------------------------
    void Client::process_msgs()
@@ -208,21 +209,22 @@ namespace rft
          }
       }
 
-      tmpMsgOut.header.type = CLIENT_VALIDATION_RESPONSE;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ClientMsgType> msgOut;
+      msgOut.header.type = CLIENT_VALIDATION_RESPONSE;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
-      tmpMsgOut << candidate;
-      tmpMsgOut << nonce;
-      tmpMsgOut << MAX_THROUGHPUT;
-      tmpMsgOut << filename;
+      msgOut << CLIENT_VALIDATION_RESPONSE;
+      msgOut << candidate;
+      msgOut << nonce;
+      msgOut << MAX_THROUGHPUT;
+      msgOut << filename;
 
       fileRequests.at(filename).retryCounter = 1;
       set_timeout_for_validation_response(filename);
       fileRequests.at(filename).tp = NOW;
 
-      send_msg(tmpMsgOut);
+      send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
    void Client::handle_initial_response(Message<ServerMsgType>& msg)
@@ -347,16 +349,17 @@ namespace rft
    {
       set_timeout_for_transmission(connectionId);
 
-      tmpMsgOut.header.type = TRANSMISSION_REQUEST;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ClientMsgType> msgOut;
+      msgOut.header.type = TRANSMISSION_REQUEST;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
       auto& conn = connections.at(connectionId);
-      tmpMsgOut << TRANSMISSION_REQUEST;
-      tmpMsgOut << connectionId;
-      tmpMsgOut << conn.window.id;
-      tmpMsgOut << rttCurrent;
-      tmpMsgOut << conn.chunksWritten;
+      msgOut << TRANSMISSION_REQUEST;
+      msgOut << connectionId;
+      msgOut << conn.window.id;
+      msgOut << rttCurrent;
+      msgOut << conn.chunksWritten;
 
       conn.window.reset();
 
@@ -365,45 +368,47 @@ namespace rft
       conn.shouldMeasureTime = true;
       conn.tp = NOW;
 
-      send_msg(tmpMsgOut);
+      send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
    void Client::request_retransmission(ConnectionID connectionId)
    {
       set_timeout_for_retransmission(connectionId);
 
-      tmpMsgOut.header.type = RETRANSMISSION_REQUEST;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ClientMsgType> msgOut;
+      msgOut.header.type = RETRANSMISSION_REQUEST;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
       auto& conn = connections.at(connectionId);
 
       Bitfield bitfield(conn.window.currentSize);
       bitfield.from(conn.window.sequenceNumbers);
 
-      tmpMsgOut << RETRANSMISSION_REQUEST;
-      tmpMsgOut << connectionId;
-      tmpMsgOut << conn.window.id;
-      tmpMsgOut << bitfield.bitfield;
+      msgOut << RETRANSMISSION_REQUEST;
+      msgOut << connectionId;
+      msgOut << conn.window.id;
+      msgOut << bitfield.bitfield;
 
       PLOG_INFO << "[Client] Requesting retransmission for connection ID " << connectionId;
 
       conn.shouldMeasureTime = true;
       conn.tp = NOW;
 
-      send_msg(tmpMsgOut);
+      send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
    void Client::send_finish_msg(ConnectionID connectionId)
    {
-      tmpMsgOut.header.type = CLIENT_FINISH_MESSAGE;
-      tmpMsgOut.header.size = 0;
-      tmpMsgOut.header.remote = socket.local_endpoint();
+      Message<ClientMsgType> msgOut;
+      msgOut.header.type = CLIENT_FINISH_MESSAGE;
+      msgOut.header.size = 0;
+      msgOut.header.remote = socket.local_endpoint();
 
-      tmpMsgOut << CLIENT_FINISH_MESSAGE;
-      tmpMsgOut << connectionId;
+      msgOut << CLIENT_FINISH_MESSAGE;
+      msgOut << connectionId;
 
-      send_msg(tmpMsgOut);
+      send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
    // TODO: think about a Timer class that can register a timeout with a generic callback function
@@ -466,18 +471,19 @@ namespace rft
             PLOG_INFO << "[Client] Repeating request for file: " << filename;
             ++fr.retryCounter;
 
-            tmpMsgOut.header.type = CLIENT_VALIDATION_RESPONSE;
-            tmpMsgOut.header.size = 0;
-            tmpMsgOut.header.remote = socket.local_endpoint();
+            Message<ClientMsgType> msgOut;
+            msgOut.header.type = CLIENT_VALIDATION_RESPONSE;
+            msgOut.header.size = 0;
+            msgOut.header.remote = socket.local_endpoint();
 
-            tmpMsgOut << CLIENT_VALIDATION_RESPONSE;
-            tmpMsgOut << fr.hash1Solution;
-            tmpMsgOut << fr.nonce;
-            tmpMsgOut << MAX_THROUGHPUT;
-            tmpMsgOut << filename;
+            msgOut << CLIENT_VALIDATION_RESPONSE;
+            msgOut << fr.hash1Solution;
+            msgOut << fr.nonce;
+            msgOut << MAX_THROUGHPUT;
+            msgOut << filename;
 
             set_timeout_for_validation_response(filename);
-            send_msg(tmpMsgOut);
+            send_msg(msgOut);
          }
       }
    }
