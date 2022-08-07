@@ -4,6 +4,7 @@
 #include "MessageQueue.hpp"
 #include "Window.hpp"
 #include "common.hpp"
+#include <filesystem>
 #include <fstream>
 #include <unordered_map>
 // ------------------------------------------------------------------------
@@ -30,14 +31,14 @@ namespace rft
       class Connection
       {
          friend class Client;
-         Connection(std::string& fileName, uint64_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
-             : filename(std::move(fileName)), fileSize(fileSize), window(std::move(window)), t(io_context)
+         Connection(std::string& filename, uint64_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
+             : filename(std::move(filename)), fileSize(fileSize), window(std::move(window)), t(io_context)
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
             file.open(this->filename, std::ios::binary | std::ios::trunc);
             if (!file) {
-               PLOG_ERROR << "[Client] Could not open file for writing";
-               // TODO: find a way to communicate this error and terminate file transfer (throw exception)
+               PLOG_ERROR << "[Client] Could not open file for writing.";
+               throw std::system_error();
             }
          }
 
@@ -75,7 +76,10 @@ namespace rft
       void start();
       void stop();
 
-      void request_file(std::string& filename);
+      void request_file(std::string filename);
+
+      static void handle_user_termination();
+      void delete_incomplete_files();
 
       void process_msgs();
 
@@ -98,6 +102,10 @@ namespace rft
       void handle_validation_request(Message<ServerMsgType>& msg);
       void handle_initial_response(Message<ServerMsgType>& msg);
       void handle_payload_packet(Message<ServerMsgType>& msg);
+      void handle_validation_failed(Message<ServerMsgType>& msg);
+      void handle_file_not_found(Message<ServerMsgType>& msg);
+      void handle_connection_not_found(Message<ServerMsgType>& msg);
+
       void handle_file_request_timeout(std::string& filename);
       void handle_validation_response_timeout(std::string& filename);
       void handle_transmission_timeout(ConnectionID connectionId);
@@ -130,6 +138,8 @@ namespace rft
       MessageQueue<Message<ServerMsgType>> msgQueue;
 
       bool done = false;
+
+      static std::sig_atomic_t abort;
    };
 }
 // ------------------------------------------------------------------------

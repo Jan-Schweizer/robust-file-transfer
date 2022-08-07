@@ -1,6 +1,5 @@
 #include "Client.hpp"
 #include "Server.hpp"
-#include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <plog/Appenders/ColorConsoleAppender.h>
@@ -15,7 +14,7 @@ int main(int argc, char* argv[])
 {
    // plog config
    static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
-   plog::init(plog::verbose, &consoleAppender);
+   plog::init(plog::info, &consoleAppender);
 
 
    string host;

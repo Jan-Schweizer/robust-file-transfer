@@ -33,6 +33,10 @@ namespace rft
    const uint16_t CLIENT_VALIDATION_RESPONSE_META_DATA_SIZE = sizeof(uint8_t) + SHA256_SIZE + sizeof(uint32_t) + sizeof(uint16_t) + 1;
    /// Size of the Server Initial Response meta data (without filename)
    const uint16_t SERVER_INITIAL_RESPONSE_META_DATA = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint64_t) + SHA256_SIZE + 1;
+   /// Size of the Client Validation failed meta data (without filename)
+   const uint16_t CLIENT_VALIDATION_FAILED_META_DATA = sizeof(uint8_t) + 1;
+   /// Size of the File Not Found meta data (without filename)
+   const uint16_t FILE_NOT_FOUND_META_DATA = sizeof(uint8_t) + 1;
    /// Size of the Server Payload Packet meta data
    const uint16_t PAYLOAD_META_DATA_SIZE = sizeof(uint8_t) + sizeof(ConnectionID) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t);
    /// Maximum size of a packet (Server Payload Packet aka Server Data Response)

@@ -75,7 +75,7 @@ namespace rft
       Message<ClientMsgType> msgIn{};
       MessageQueue<Message<ClientMsgType>> msgQueue;
 
-      const size_t timeoutInMin = 3;
+      const size_t TIMEOUT = 3;
 
       const std::string SERVER_SECRET = "SERVER_SECRET";
       const uint8_t DIFFICULTY = 10;

@@ -4,6 +4,8 @@
 #include "util.hpp"
 #include <boost/bind/bind.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
+#include <csignal>
+#include <filesystem>
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -13,6 +15,8 @@ namespace rft
    {
       resolve_server();
    }
+   // ------------------------------------------------------------------------
+   int Client::abort = 0;
    // ------------------------------------------------------------------------
    Client::~Client() { stop(); }
    // ------------------------------------------------------------------------
@@ -31,6 +35,8 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::start()
    {
+      handle_user_termination();
+
       receive_msg();
       thread_context = std::thread([this]() { io_context.run(); });
 
@@ -53,7 +59,7 @@ namespace rft
       start();
    }
    // ------------------------------------------------------------------------
-   void Client::request_file(std::string& filename)
+   void Client::request_file(std::string filename)
    {
       Message<ClientMsgType> msgOut;
       msgOut.header.type = FILE_REQUEST;
@@ -100,6 +106,17 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::handle_receive(const boost::system::error_code& error, size_t bytes_transferred)
    {
+      // don't accept more incoming packets if user aborted
+      if (abort == 1) {
+         for (auto& fr: fileRequests) {
+            fr.second.t.cancel();
+         }
+         for (auto& conn: connections) {
+            conn.second.t.cancel();
+         }
+         return;
+      }
+
       if (!error) {
          // PLOG_VERBOSE << "[Client] Received message";
          enqueue_msg(bytes_transferred);
@@ -132,6 +149,11 @@ namespace rft
       while (!done) {
          msgQueue.wait();
 
+         if (abort == 1) {
+            delete_incomplete_files();
+            return;
+         }
+
          while (!msgQueue.empty()) {
             auto msg = msgQueue.pop_front();
             dispatch_msg(msg);
@@ -154,8 +176,13 @@ namespace rft
             handle_payload_packet(msg);
             break;
          case ERROR_FILE_NOT_FOUND:
+            handle_file_not_found(msg);
+            break;
          case ERROR_CLIENT_VALIDATION_FAILED:
+            handle_validation_failed(msg);
+            break;
          case ERROR_CONNECTION_NOT_FOUND:
+            handle_connection_not_found(msg);
             break;
          // Ignore unknown packets
          default:
@@ -252,9 +279,38 @@ namespace rft
 
       PLOG_INFO << "[Client] Got Initial response for file: " << filename;
 
+      auto connectionResumption = std::find_if(connections.begin(), connections.end(), [&](auto& conn) {
+         return std::filesystem::path(conn.second.filename).filename() == filename;
+      });
+
+      if (connectionResumption != connections.end()) {
+         // is connection resumption
+         auto& conn = connectionResumption->second;
+         if (std::strncmp(reinterpret_cast<char*>(conn.sha256), reinterpret_cast<char*>(sha256), SHA256_SIZE) != 0) {
+            // file changed
+            conn.file.close();
+            std::remove(conn.filename.c_str());
+            connections.erase(connectionResumption->first);
+         } else {
+            // file not changed -> need to update connectionId key
+            auto nh = connections.extract(connectionResumption->first);
+            nh.key() = connectionId;
+            connections.insert(std::move(nh));
+            // since unordered_map::insert only inserts e if e is not present in map, the second insert call below won't insert the connection a second time
+         }
+      }
+
       std::string dest = fileDest + "/" + filename;
       Window window{MAX_THROUGHPUT * 1024 * 1024 / CHUNK_SIZE};
-      connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window), io_context}});
+
+      try {
+         connections.insert({connectionId, Connection{dest, fileSize, sha256, std::move(window), io_context}});
+      } catch (const std::system_error& ex) {
+         PLOG_ERROR << "[Client] Error when initializing Connection. ";
+         done = connections.empty() && fileRequests.empty();
+         send_finish_msg(connectionId);
+         return;
+      }
 
       request_transmission(connectionId);
    }
@@ -312,7 +368,14 @@ namespace rft
          for (size_t i = 0; i < currentWindowSize; ++i) {
             uint32_t bytes = conn.window.chunks[i].size();
             conn.file.write(reinterpret_cast<char*>(conn.window.chunks[i].data()), bytes);
-            // TODO: check for badbit (!conn.file) and send no space left error message
+
+            // No space left
+            if (!conn.file) {
+               PLOG_WARNING << "[Client] Could not write to file " << conn.filename;
+               send_finish_msg(connectionId);
+               return;
+            }
+
             bytesWritten += bytes;
          }
          conn.bytesWritten += bytesWritten;
@@ -488,6 +551,45 @@ namespace rft
       }
    }
    // ------------------------------------------------------------------------
+   void Client::handle_validation_failed(Message<ServerMsgType>& msg)
+   {
+      size_t filenameSize = msg.header.size - CLIENT_VALIDATION_FAILED_META_DATA;
+      std::string filename(filenameSize, '\0');
+
+      msg >> filename;
+
+      fileRequests.erase(filename);
+      done = connections.empty() && fileRequests.empty();
+
+      PLOG_WARNING << "[Client] Validation failed for file " << filename << "\nYou might want to retry the file transfer!";
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_file_not_found(Message<ServerMsgType>& msg)
+   {
+      size_t filenameSize = msg.header.size - FILE_NOT_FOUND_META_DATA;
+      std::string filename(filenameSize, '\0');
+
+      msg >> filename;
+
+      fileRequests.erase(filename);
+      done = connections.empty() && fileRequests.empty();
+
+      PLOG_WARNING << "[Client] File " << filename << " not found on server!";
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_connection_not_found(Message<ServerMsgType>& msg)
+   {
+      ConnectionID connectionId;
+
+      msg >> connectionId;
+
+      auto search = connections.find(connectionId);
+      if (search != connections.end()) {
+         auto& conn = search->second;
+         request_file(std::filesystem::path(conn.filename).filename());
+      }
+   }
+   // ------------------------------------------------------------------------
    void Client::set_timeout_for_transmission(ConnectionID connectionId)
    {
       auto& conn = connections.at(connectionId);
@@ -503,6 +605,7 @@ namespace rft
 
          if (conn.retryCounter > conn.maxRetries) {
             PLOG_ERROR << "[Client] Sent multiple Transmission Requests. Server may have disconnected.";
+            std::remove(conn.filename.c_str());
             connections.erase(connectionId);
             done = fileRequests.empty() && connections.empty();
             // wake the main thread that is waiting on the msqQueue condition variable
@@ -533,6 +636,7 @@ namespace rft
 
          if (conn.retryCounter > conn.maxRetries) {
             PLOG_ERROR << "[Client] Sent multiple Retransmission Requests. Server may have disconnected.";
+            std::remove(conn.filename.c_str());
             connections.erase(connectionId);
             done = fileRequests.empty() && connections.empty();
             // wake the main thread that is waiting on the msqQueue condition variable
@@ -545,6 +649,27 @@ namespace rft
             ++conn.retryCounter;
             request_retransmission(connectionId);
          }
+      }
+   }
+   // ------------------------------------------------------------------------
+   void Client::handle_user_termination()
+   {
+      signal(SIGINT, [](int signum) {
+         PLOG_WARNING << "[Client] Aborted file transfer. Deleting all incomplete files!";
+         Client::abort = 1;
+      });
+   }
+   // ------------------------------------------------------------------------
+   void Client::delete_incomplete_files()
+   {
+      for (auto& conn: connections) {
+         PLOG_WARNING << "[Client] Deleting incomplete file " << conn.second.filename;
+         conn.second.file.close();
+         std::remove(conn.second.filename.c_str());
+
+         // Specification says that a Client Connection Termination message should be sent.
+         // In hindsight, there is no need for that message as the Client Finish Message can be used instead (the server does not need to know why the client terminated/finished)
+         send_finish_msg(conn.first);
       }
    }
    // ------------------------------------------------------------------------

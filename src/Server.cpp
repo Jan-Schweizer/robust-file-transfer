@@ -188,7 +188,16 @@ namespace rft
       compute_SHA256(reinterpret_cast<unsigned char*>(str.data()), str.size(), originalHash1);
       if (std::strncmp(reinterpret_cast<char*>(originalHash1), reinterpret_cast<char*>(hash1), SHA256_SIZE) != 0) {
          PLOG_WARNING << "[Server] Client did not pass validation for file: " << filename;
-         // TODO: send back error message
+
+         Message<ServerMsgType> msgOut;
+         msgOut.header.type = ERROR_CLIENT_VALIDATION_FAILED;
+         msgOut.header.size = 0;
+         msgOut.header.remote = socket.local_endpoint();
+
+         msgOut << ERROR_CLIENT_VALIDATION_FAILED;
+         msgOut << filename;
+
+         send_msg_to_client(msgOut, msg.header.remote);
          return;
       }
 
@@ -196,8 +205,16 @@ namespace rft
 
       std::ifstream file(filename, std::ios::in | std::ios::binary);
       if (!file) {
-         PLOG_ERROR << "[Server] File: " << filename << " does not exist!";
-         // TODO: send back error message
+         PLOG_WARNING << "[Server] File: " << filename << " does not exist!";
+         Message<ServerMsgType> msgOut;
+         msgOut.header.type = ERROR_FILE_NOT_FOUND;
+         msgOut.header.size = 0;
+         msgOut.header.remote = socket.local_endpoint();
+
+         msgOut << ERROR_FILE_NOT_FOUND;
+         msgOut << filename;
+
+         send_msg_to_client(msgOut, msg.header.remote);
          return;
       }
 
@@ -238,8 +255,17 @@ namespace rft
 
       auto search = connections.find(connectionId);
       if (search == connections.end()) {
-         // TODO: resume connection (remember to advance file idx pointer) & logging
-         PLOG_INFO << "No connection for: " << connectionId;
+         PLOG_WARNING << "No connection for: " << connectionId;
+
+         Message<ServerMsgType> msgOut;
+         msgOut.header.type = ERROR_CONNECTION_NOT_FOUND;
+         msgOut.header.size = 0;
+         msgOut.header.remote = socket.local_endpoint();
+
+         msgOut << ERROR_CONNECTION_NOT_FOUND;
+         msgOut << connectionId;
+
+         send_msg_to_client(msgOut, msg.header.remote);
          return;
       }
       auto& conn = search->second;
@@ -314,7 +340,22 @@ namespace rft
 
       PLOG_INFO << "[Server] Received Retransmission Request for connection ID " << connectionId;
 
-      auto& conn = connections.at(connectionId);
+      auto search = connections.find(connectionId);
+      if (search == connections.end()) {
+         PLOG_WARNING << "No connection for: " << connectionId;
+
+         Message<ServerMsgType> msgOut;
+         msgOut.header.type = ERROR_CONNECTION_NOT_FOUND;
+         msgOut.header.size = 0;
+         msgOut.header.remote = socket.local_endpoint();
+
+         msgOut << ERROR_CONNECTION_NOT_FOUND;
+         msgOut << connectionId;
+
+         send_msg_to_client(msgOut, msg.header.remote);
+         return;
+      }
+      auto& conn = search->second;
 
       conn.cc.phase = CongestionControl::Phase::CC_AVOIDANCE;
 
@@ -349,7 +390,7 @@ namespace rft
    {
       auto& conn = connections.at(connectionId);
 
-      conn.t.expires_after(boost::asio::chrono::minutes(timeoutInMin));
+      conn.t.expires_after(minutes(TIMEOUT));
       conn.t.async_wait(boost::bind(&Server::handle_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
