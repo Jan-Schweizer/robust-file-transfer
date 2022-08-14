@@ -64,5 +64,13 @@ namespace rft
       }
    }
    // ------------------------------------------------------------------------
+   double random()
+   {
+      static std::random_device rd;
+      static std::default_random_engine eng(rd());
+      static std::uniform_real_distribution<double> dist(0, 1);
+      return dist(eng);
+   }
+   // ------------------------------------------------------------------------
 }// namespace rft
 // ------------------------------------------------------------------------

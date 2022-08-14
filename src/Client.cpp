@@ -1,7 +1,6 @@
 // ------------------------------------------------------------------------
 #include "Client.hpp"
 #include "Bitfield.hpp"
-#include "util.hpp"
 #include <boost/bind/bind.hpp>
 #include <boost/multiprecision/cpp_int.hpp>
 #include <csignal>
@@ -10,8 +9,8 @@
 namespace rft
 {
    // ------------------------------------------------------------------------
-   Client::Client(std::string host, const size_t port, std::string& fileDest)
-       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port), fileDest(std::move(fileDest))
+   Client::Client(std::string host, const size_t port, std::string& fileDest, double p, double q)
+       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port + 1)), host(std::move(host)), port(port), fileDest(std::move(fileDest)), p(p), q(q)
    {
       resolve_server();
    }
@@ -81,6 +80,21 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::send_msg(Message<ClientMsgType> msg)
    {
+      switch (packetLossState) {
+         case PacketLossState::LOST:
+            if (rft::random() < q) {
+               return;
+            }
+            packetLossState = PacketLossState::NOT_LOST;
+            break;
+         case PacketLossState::NOT_LOST:
+            if (rft::random() < p) {
+               packetLossState = PacketLossState::LOST;
+               return;
+            }
+            break;
+      }
+
       socket.async_send_to(buffer(msg.packet, msg.header.size), server_endpoint,
                            boost::bind(&Client::handle_send, this,
                                        boost::asio::placeholders::error,

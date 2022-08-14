@@ -5,6 +5,7 @@
 #include "MessageQueue.hpp"
 #include "Window.hpp"
 #include "common.hpp"
+#include "util.hpp"
 #include <fstream>
 #include <unordered_map>
 #include <utility>
@@ -33,7 +34,7 @@ namespace rft
       // ------------------------------------------------------------------------
 
     public:
-      explicit Server(size_t port);
+      explicit Server(size_t port, double p, double q);
       Server(const Server& other) = delete;
       Server(const Server&& other) = delete;
       ~Server();
@@ -79,6 +80,10 @@ namespace rft
 
       const std::string SERVER_SECRET = "SERVER_SECRET";
       const uint8_t DIFFICULTY = 10;
+
+      PacketLossState packetLossState = PacketLossState::NOT_LOST;
+      double p;
+      double q;
    };
 }// namespace rft
 // ------------------------------------------------------------------------

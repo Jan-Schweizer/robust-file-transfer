@@ -2,6 +2,7 @@
 #define ROBUST_FILE_TRANSFER_UTIL_HPP
 // ------------------------------------------------------------------------
 #include "common.hpp"
+#include <random>
 #include <string>
 // ------------------------------------------------------------------------
 namespace rft
@@ -11,6 +12,14 @@ namespace rft
 
    // https://gist.github.com/ccbrown/9722406
    void hexdump(const void* data, size_t size);
+
+   enum class PacketLossState
+   {
+      LOST,
+      NOT_LOST,
+   };
+
+   double random();
 }// namespace rft
 // ------------------------------------------------------------------------
 #endif//ROBUST_FILE_TRANSFER_UTIL_HPP

@@ -2,7 +2,6 @@
 #include "Server.hpp"
 #include "Bitfield.hpp"
 #include "CongestionControl.hpp"
-#include "util.hpp"
 #include <boost/bind/bind.hpp>
 #include <filesystem>
 #include <fstream>
@@ -10,8 +9,8 @@
 namespace rft
 {
    // ------------------------------------------------------------------------
-   Server::Server(const size_t port)
-       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port)), port(port) {}
+   Server::Server(const size_t port, double p, double q)
+       : socket(io_context, ip::udp::endpoint(ip::udp::v4(), port)), port(port), p(p), q(q) {}
    // ------------------------------------------------------------------------
    Server::~Server() { stop(); }
    // ------------------------------------------------------------------------
@@ -52,6 +51,21 @@ namespace rft
    // ------------------------------------------------------------------------
    void Server::send_msg_to_client(Message<ServerMsgType> msg, const ip::udp::endpoint& client)
    {
+      switch (packetLossState) {
+         case PacketLossState::LOST:
+            if (rft::random() < q) {
+               return;
+            }
+            packetLossState = PacketLossState::NOT_LOST;
+            break;
+         case PacketLossState::NOT_LOST:
+            if (rft::random() < p) {
+               packetLossState = PacketLossState::LOST;
+               return;
+            }
+            break;
+      }
+
       socket.async_send_to(buffer(msg.packet, msg.header.size), client,
                            boost::bind(&Server::handle_send, this,
                                        boost::asio::placeholders::error,
@@ -143,7 +157,7 @@ namespace rft
 
       // mask difficulty-number of bits from hash1
       uint8_t remaining = DIFFICULTY;
-      uint8_t byte = SHA256_SIZE -1;
+      uint8_t byte = SHA256_SIZE - 1;
       while (remaining >= 8) {
          hash1[byte] = 0;
          --byte;

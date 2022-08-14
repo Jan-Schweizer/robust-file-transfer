@@ -118,14 +118,14 @@ int main(int argc, char* argv[])
 
    if (is_server) {
       try {
-         rft::Server server(port);
+         rft::Server server(port, p, q);
          server.start();
       } catch (std::exception& e) {
          PLOG_ERROR << e.what();
       }
    } else if (is_client) {
       try {
-         rft::Client client(host, port, dest);
+         rft::Client client(host, port, dest, p, q);
          client.request_files(files);
       } catch (std::exception& e) {
          PLOG_ERROR << e.what();

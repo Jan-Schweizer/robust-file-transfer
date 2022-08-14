@@ -4,6 +4,7 @@
 #include "MessageQueue.hpp"
 #include "Window.hpp"
 #include "common.hpp"
+#include "util.hpp"
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
@@ -64,7 +65,7 @@ namespace rft
       // ------------------------------------------------------------------------
 
     public:
-      Client(std::string host, size_t port, std::string& fileDest);
+      Client(std::string host, size_t port, std::string& fileDest, double p, double q);
       Client(const Client& other) = delete;
       Client(const Client&& other) = delete;
       ~Client();
@@ -140,6 +141,10 @@ namespace rft
       bool done = false;
 
       static std::sig_atomic_t abort;
+
+      PacketLossState packetLossState = PacketLossState::NOT_LOST;
+      double p;
+      double q;
    };
 }
 // ------------------------------------------------------------------------
