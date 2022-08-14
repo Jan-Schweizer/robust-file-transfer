@@ -143,13 +143,13 @@ namespace rft
 
       // mask difficulty-number of bits from hash1
       uint8_t remaining = DIFFICULTY;
-      uint8_t byte = 0;
+      uint8_t byte = SHA256_SIZE -1;
       while (remaining >= 8) {
          hash1[byte] = 0;
-         ++byte;
+         --byte;
          remaining -= 8;
       }
-      hash1[byte] &= 0b11111111 >> remaining;
+      hash1[byte] &= 0b11111111 << remaining;
 
       Message<ServerMsgType> msgOut;
       msgOut.header.type = SERVER_VALIDATION_REQUEST;

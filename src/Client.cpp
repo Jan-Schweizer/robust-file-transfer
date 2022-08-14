@@ -223,7 +223,7 @@ namespace rft
       import_bits(bigint, std::begin(hash1), std::end(hash1));
       for (uint256_t i = 0, one256 = 1; i < one256 << difficulty; ++i) {
          uint256_t tmp = bigint;
-         tmp |= i << 256 - difficulty;
+         tmp |= i;
          export_bits(tmp, std::begin(candidate), 8);
          compute_SHA256(candidate, SHA256_SIZE, candidate_hash);
 
@@ -531,7 +531,7 @@ namespace rft
          }
 
          if (fr.t.expiry() <= steady_timer::clock_type::now()) {
-            PLOG_INFO << "[Client] Repeating request for file: " << filename;
+            PLOG_INFO << "[Client] Repeating validation response for file : " << filename;
             ++fr.retryCounter;
 
             Message<ClientMsgType> msgOut;
