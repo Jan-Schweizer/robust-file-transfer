@@ -251,7 +251,8 @@ namespace rft
       msgOut << sha256;
       msgOut << filename;
 
-      set_timeout(connectionId);
+      auto& conn = connections.at(connectionId);
+      conn.timer.setTimeout(minutes(TIMEOUT), boost::bind(&Server::handle_timeout, this, connectionId));
       send_msg_to_client(msgOut, msg.header.remote);
    }
    // ------------------------------------------------------------------------
@@ -325,7 +326,8 @@ namespace rft
 
          conn.window.store_chunk(chunk, i);
 
-         set_timeout(connectionId);
+         conn.timer.setTimeout(minutes(TIMEOUT), boost::bind(&Server::handle_timeout, this, connectionId));
+
          send_msg_to_client(msgOut, msg.header.remote);
       }
    }
@@ -394,18 +396,11 @@ namespace rft
             msgOut << i;
             msgOut << conn.window.chunks[i];
 
-            set_timeout(connectionId);
+            conn.timer.setTimeout(minutes(TIMEOUT), boost::bind(&Server::handle_timeout, this, connectionId));
+
             send_msg_to_client(msgOut, msg.header.remote);
          }
       }
-   }
-   // ------------------------------------------------------------------------
-   void Server::set_timeout(ConnectionID connectionId)
-   {
-      auto& conn = connections.at(connectionId);
-
-      conn.t.expires_after(minutes(TIMEOUT));
-      conn.t.async_wait(boost::bind(&Server::handle_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
    void Server::handle_timeout(ConnectionID connectionId)
@@ -413,7 +408,7 @@ namespace rft
       auto search = connections.find(connectionId);
       if (search != connections.end()) {
          auto& conn = search->second;
-         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+         if (conn.timer.isExpired()) {
             PLOG_INFO << "Timeout expired for: " << connectionId;
             connections.erase(connectionId);
          }

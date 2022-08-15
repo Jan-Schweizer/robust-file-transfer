@@ -2,6 +2,7 @@
 #define ROBUST_FILE_TRANSFER_CLIENT_HPP
 // ------------------------------------------------------------------------
 #include "MessageQueue.hpp"
+#include "Timer.hpp"
 #include "Window.hpp"
 #include "common.hpp"
 #include "util.hpp"
@@ -19,11 +20,11 @@ namespace rft
       {
          friend class Client;
 
-         explicit FileRequest(boost::asio::io_context& io_context) : t(io_context) {}
+         explicit FileRequest(boost::asio::io_context& io_context) : timer(io_context) {}
 
          uint32_t nonce = 0;
          unsigned char hash1Solution[SHA256_SIZE]{'\0'};
-         boost::asio::steady_timer t;
+         Timer timer;
          timepoint tp;
          uint8_t retryCounter = 1;
          const uint8_t maxRetries = 10;
@@ -33,7 +34,7 @@ namespace rft
       {
          friend class Client;
          Connection(std::string& filename, uint64_t fileSize, unsigned char sha256[SHA256_SIZE], Window window, boost::asio::io_context& io_context)
-             : filename(std::move(filename)), fileSize(fileSize), window(std::move(window)), t(io_context)
+             : filename(std::move(filename)), fileSize(fileSize), window(std::move(window)), timer(io_context)
          {
             std::memcpy(this->sha256, sha256, SHA256_SIZE);
             file.open(this->filename, std::ios::binary | std::ios::trunc);
@@ -51,7 +52,7 @@ namespace rft
          unsigned char sha256[SHA256_SIZE]{'\0'};
          Window window;
 
-         boost::asio::steady_timer t;
+         Timer timer;
          timepoint tp;
          bool shouldMeasureTime = true;
          uint8_t retryCounter = 1;
@@ -94,11 +95,6 @@ namespace rft
 
       void enqueue_msg(size_t bytes_transferred);
       void decode_msg(size_t bytes_transferred);
-
-      void set_timeout_for_file_request(std::string& filename);
-      void set_timeout_for_validation_response(std::string& filename);
-      void set_timeout_for_transmission(ConnectionID connectionId);
-      void set_timeout_for_retransmission(ConnectionID connectionId);
 
       void handle_validation_request(Message<ServerMsgType>& msg);
       void handle_initial_response(Message<ServerMsgType>& msg);

@@ -72,8 +72,10 @@ namespace rft
 
       fileRequests.insert({filename, FileRequest{io_context}});
 
-      set_timeout_for_file_request(filename);
-      fileRequests.at(filename).tp = NOW;
+      auto& fr = fileRequests.at(filename);
+      // Set a long timeout for a file request (calculation of SHA256 can take a while)
+      fr.timer.setTimeout(minutes(10), boost::bind(&Client::handle_file_request_timeout, this, filename));
+      fr.tp = NOW;
 
       send_msg(msgOut);
    }
@@ -123,10 +125,10 @@ namespace rft
       // don't accept more incoming packets if user aborted
       if (abort == 1) {
          for (auto& fr: fileRequests) {
-            fr.second.t.cancel();
+            fr.second.timer.cancel();
          }
          for (auto& conn: connections) {
-            conn.second.t.cancel();
+            conn.second.timer.cancel();
          }
          return;
       }
@@ -261,9 +263,11 @@ namespace rft
       msgOut << MAX_THROUGHPUT;
       msgOut << filename;
 
-      fileRequests.at(filename).retryCounter = 1;
-      set_timeout_for_validation_response(filename);
-      fileRequests.at(filename).tp = NOW;
+      auto& fr = fileRequests.at(filename);
+      fr.retryCounter = 1;
+      // Set a reasonably long timeout to validate the solution
+      fr.timer.setTimeout(minutes(1), boost::bind(&Client::handle_validation_response_timeout, this, filename));
+      fr.tp = NOW;
 
       send_msg(msgOut);
    }
@@ -367,7 +371,8 @@ namespace rft
          return;
       }
 
-      set_timeout_for_retransmission(connectionId);
+      conn.timer.setTimeout(timeunit(rttTotal / rttCount * TIMEOUT), boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
+
       // Server did respond -> reset retry counter
       conn.retryCounter = 1;
 
@@ -376,7 +381,7 @@ namespace rft
 
       if (conn.window.isWindowComplete()) {
          // TODO: maybe extract this to separate function
-         conn.t.cancel();
+         conn.timer.cancel();
 
          uint32_t bytesWritten = 0;
          for (size_t i = 0; i < currentWindowSize; ++i) {
@@ -424,14 +429,14 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::request_transmission(ConnectionID connectionId)
    {
-      set_timeout_for_transmission(connectionId);
+      auto& conn = connections.at(connectionId);
+      conn.timer.setTimeout(timeunit(rttTotal / rttCount * TIMEOUT), boost::bind(&Client::handle_transmission_timeout, this, connectionId));
 
       Message<ClientMsgType> msgOut;
       msgOut.header.type = TRANSMISSION_REQUEST;
       msgOut.header.size = 0;
       msgOut.header.remote = socket.local_endpoint();
 
-      auto& conn = connections.at(connectionId);
       msgOut << TRANSMISSION_REQUEST;
       msgOut << connectionId;
       msgOut << conn.window.id;
@@ -450,14 +455,13 @@ namespace rft
    // ------------------------------------------------------------------------
    void Client::request_retransmission(ConnectionID connectionId)
    {
-      set_timeout_for_retransmission(connectionId);
+      auto& conn = connections.at(connectionId);
+      conn.timer.setTimeout(timeunit(rttTotal / rttCount * TIMEOUT), boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
 
       Message<ClientMsgType> msgOut;
       msgOut.header.type = RETRANSMISSION_REQUEST;
       msgOut.header.size = 0;
       msgOut.header.remote = socket.local_endpoint();
-
-      auto& conn = connections.at(connectionId);
 
       Bitfield bitfield(conn.window.currentSize);
       bitfield.from(conn.window.sequenceNumbers);
@@ -488,16 +492,6 @@ namespace rft
       send_msg(msgOut);
    }
    // ------------------------------------------------------------------------
-   // TODO: think about a Timer class that can register a timeout with a generic callback function
-   // ------------------------------------------------------------------------
-   void Client::set_timeout_for_file_request(std::string& filename)
-   {
-      auto& fr = fileRequests.at(filename);
-      // Set a long timeout for a file request (calculation of SHA256 can take a while)
-      fr.t.expires_after(minutes(10));
-      fr.t.async_wait(boost::bind(&Client::handle_file_request_timeout, this, filename));
-   }
-   // ------------------------------------------------------------------------
    void Client::handle_file_request_timeout(std::string& filename)
    {
       auto search = fileRequests.find(filename);
@@ -513,20 +507,12 @@ namespace rft
             return;
          }
 
-         if (fr.t.expiry() <= steady_timer::clock_type::now()) {
+         if (fr.timer.isExpired()) {
             PLOG_INFO << "[Client] Repeating request for file: " << filename;
             ++fr.retryCounter;
             request_file(filename);
          }
       }
-   }
-   // ------------------------------------------------------------------------
-   void Client::set_timeout_for_validation_response(std::string& filename)
-   {
-      auto& fr = fileRequests.at(filename);
-      // Set a reasonably long timeout to validate the solution
-      fr.t.expires_after(minutes(1));
-      fr.t.async_wait(boost::bind(&Client::handle_validation_response_timeout, this, filename));
    }
    // ------------------------------------------------------------------------
    void Client::handle_validation_response_timeout(std::string& filename)
@@ -544,7 +530,7 @@ namespace rft
             return;
          }
 
-         if (fr.t.expiry() <= steady_timer::clock_type::now()) {
+         if (fr.timer.isExpired()) {
             PLOG_INFO << "[Client] Repeating validation response for file : " << filename;
             ++fr.retryCounter;
 
@@ -559,7 +545,8 @@ namespace rft
             msgOut << MAX_THROUGHPUT;
             msgOut << filename;
 
-            set_timeout_for_validation_response(filename);
+            // Set a reasonably long timeout to validate the solution
+            fr.timer.setTimeout(minutes(1), boost::bind(&Client::handle_validation_response_timeout, this, filename));
             send_msg(msgOut);
          }
       }
@@ -604,13 +591,6 @@ namespace rft
       }
    }
    // ------------------------------------------------------------------------
-   void Client::set_timeout_for_transmission(ConnectionID connectionId)
-   {
-      auto& conn = connections.at(connectionId);
-      conn.t.expires_after(timeunit(rttTotal / rttCount * TIMEOUT));
-      conn.t.async_wait(boost::bind(&Client::handle_transmission_timeout, this, connectionId));
-   }
-   // ------------------------------------------------------------------------
    void Client::handle_transmission_timeout(ConnectionID connectionId)
    {
       auto search = connections.find(connectionId);
@@ -627,19 +607,12 @@ namespace rft
             return;
          }
 
-         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+         if (conn.timer.isExpired()) {
             PLOG_INFO << "[Client] Repeating Transmission Request for " << connectionId;
             ++conn.retryCounter;
             request_transmission(connectionId);
          }
       }
-   }
-   // ------------------------------------------------------------------------
-   void Client::set_timeout_for_retransmission(ConnectionID connectionId)
-   {
-      auto& conn = connections.at(connectionId);
-      conn.t.expires_after(timeunit(rttTotal / rttCount * TIMEOUT));
-      conn.t.async_wait(boost::bind(&Client::handle_retransmission_timeout, this, connectionId));
    }
    // ------------------------------------------------------------------------
    void Client::handle_retransmission_timeout(ConnectionID connectionId)
@@ -658,7 +631,7 @@ namespace rft
             return;
          }
 
-         if (conn.t.expiry() <= steady_timer::clock_type::now()) {
+         if (conn.timer.isExpired()) {
             PLOG_INFO << "[Client] Retransmission Request for " << connectionId;
             ++conn.retryCounter;
             request_retransmission(connectionId);
