@@ -83,7 +83,7 @@ namespace rft
       void wait()
       {
          std::unique_lock lock(mux_cv);
-         cv.wait_for(lock, seconds(10));
+         cv.wait_for(lock, seconds(3));
       }
 
       void wake()

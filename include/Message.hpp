@@ -9,27 +9,27 @@ namespace rft
    enum ClientMsgType : uint8_t
    {
       // Standard Types
-      FILE_REQUEST = 0,// aka Client Initial Request
-      CLIENT_VALIDATION_RESPONSE = 2,
-      TRANSMISSION_REQUEST = 4,
-      RETRANSMISSION_REQUEST = 6,
-      CLIENT_FINISH_MESSAGE = 7,
+      FILE_REQUEST = 0x00,// aka Client Initial Request
+      CLIENT_VALIDATION_RESPONSE = 0x02,
+      TRANSMISSION_REQUEST = 0x04,
+      RETRANSMISSION_REQUEST = 0x06,
+      CLIENT_FINISH_MESSAGE = 0x07,
 
       // Error Types
-      ERROR_CONNECTION_TERMINATION = 12
+      ERROR_CONNECTION_TERMINATION = 0x12
    };
    // ------------------------------------------------------------------------
    enum ServerMsgType : uint8_t
    {
       // Standard Types
-      SERVER_VALIDATION_REQUEST = 1,
-      SERVER_INITIAL_RESPONSE = 3,
-      PAYLOAD = 5,// aka Server Data Response
+      SERVER_VALIDATION_REQUEST = 0x01,
+      SERVER_INITIAL_RESPONSE = 0x03,
+      PAYLOAD = 0x05,// aka Server Data Response
 
       // Error Types
-      ERROR_FILE_NOT_FOUND = 11,
-      ERROR_CLIENT_VALIDATION_FAILED = 10,
-      ERROR_CONNECTION_NOT_FOUND = 13
+      ERROR_FILE_NOT_FOUND = 0x11,
+      ERROR_CLIENT_VALIDATION_FAILED = 0x10,
+      ERROR_CONNECTION_NOT_FOUND = 0x13
    };
    // ------------------------------------------------------------------------
    template<typename MsgType>

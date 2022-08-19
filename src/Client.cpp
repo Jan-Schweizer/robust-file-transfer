@@ -202,6 +202,7 @@ namespace rft
             break;
          // Ignore unknown packets
          default:
+            PLOG_VERBOSE << "[Client] Dropping unknown packet.";
             return;
       }
    }
