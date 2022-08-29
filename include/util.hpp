@@ -20,6 +20,22 @@ namespace rft
    };
 
    double random();
+
+   template<std::integral T>
+   T hton(T i)
+   {
+      if constexpr (std::endian::native == std::endian::little) {
+         return std::byteswap(i);
+      }
+   }
+
+   template<std::integral T>
+   T ntoh(T i)
+   {
+      if constexpr (std::endian::native == std::endian::little) {
+         return std::byteswap(i);
+      }
+   }
 }// namespace rft
 // ------------------------------------------------------------------------
 #endif//ROBUST_FILE_TRANSFER_UTIL_HPP

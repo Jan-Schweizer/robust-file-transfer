@@ -226,6 +226,8 @@ namespace rft
       msg >> hash1;
       msg >> difficulty;
 
+      nonce = ntoh(nonce);
+
       auto duration = chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
       ++rttCount;
       rttCurrent = duration.count();
@@ -260,8 +262,8 @@ namespace rft
 
       msgOut << CLIENT_VALIDATION_RESPONSE;
       msgOut << candidate;
-      msgOut << nonce;
-      msgOut << MAX_THROUGHPUT;
+      msgOut << hton(nonce);
+      msgOut << hton(MAX_THROUGHPUT);
       msgOut << filename;
 
       auto& fr = fileRequests.at(filename);
@@ -288,6 +290,9 @@ namespace rft
       msg >> sha256;
       msg >> fileSize;
       msg >> connectionId;
+
+      fileSize = ntoh(fileSize);
+      connectionId = ntoh(connectionId);
 
       auto duration = chrono::duration_cast<timeunit>(end - fileRequests.at(filename).tp);
       ++rttCount;
@@ -351,6 +356,10 @@ namespace rft
       msg >> currentWindowSize;
       msg >> windowId;
       msg >> connectionId;
+
+      sequenceNumber = ntoh(sequenceNumber);
+      currentWindowSize = ntoh(currentWindowSize);
+      connectionId = ntoh(connectionId);
 
       auto search = connections.find(connectionId);
       if (search == connections.end()) {
@@ -439,10 +448,10 @@ namespace rft
       msgOut.header.remote = socket.local_endpoint();
 
       msgOut << TRANSMISSION_REQUEST;
-      msgOut << connectionId;
+      msgOut << hton(connectionId);
       msgOut << conn.window.id;
-      msgOut << rttCurrent;
-      msgOut << conn.chunksWritten;
+      msgOut << hton(rttCurrent);
+      msgOut << hton(conn.chunksWritten);
 
       conn.window.reset();
 
@@ -468,7 +477,7 @@ namespace rft
       bitfield.from(conn.window.sequenceNumbers);
 
       msgOut << RETRANSMISSION_REQUEST;
-      msgOut << connectionId;
+      msgOut << hton(connectionId);
       msgOut << conn.window.id;
       msgOut << bitfield.bitfield;
 
@@ -488,7 +497,7 @@ namespace rft
       msgOut.header.remote = socket.local_endpoint();
 
       msgOut << CLIENT_FINISH_MESSAGE;
-      msgOut << connectionId;
+      msgOut << hton(connectionId);
 
       send_msg(msgOut);
    }
@@ -542,8 +551,8 @@ namespace rft
 
             msgOut << CLIENT_VALIDATION_RESPONSE;
             msgOut << fr.hash1Solution;
-            msgOut << fr.nonce;
-            msgOut << MAX_THROUGHPUT;
+            msgOut << hton(fr.nonce);
+            msgOut << hton(MAX_THROUGHPUT);
             msgOut << filename;
 
             // Set a reasonably long timeout to validate the solution
@@ -584,6 +593,8 @@ namespace rft
       ConnectionID connectionId;
 
       msg >> connectionId;
+
+      connectionId = ntoh(connectionId);
 
       auto search = connections.find(connectionId);
       if (search != connections.end()) {
