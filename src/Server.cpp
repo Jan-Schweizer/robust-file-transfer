@@ -175,7 +175,7 @@ namespace rft
       msgOut << DIFFICULTY;
       msgOut << hash1;
       msgOut << hash2;
-      msgOut << hton(nonce);
+      msgOut << nonce;
       msgOut << filename;
 
       PLOG_INFO << "[Server] Client requesting file: " << filename;
@@ -197,9 +197,6 @@ namespace rft
       msg >> maxThroughput;
       msg >> nonce;
       msg >> hash1;
-
-      maxThroughput = ntoh(maxThroughput);
-      nonce = ntoh(nonce);
 
       // verify solution
       std::string str(std::to_string(nonce) + filename + SERVER_SECRET);
@@ -250,8 +247,8 @@ namespace rft
       msgOut.header.remote = socket.local_endpoint();
 
       msgOut << SERVER_INITIAL_RESPONSE;
-      msgOut << hton(connectionId);
-      msgOut << hton(fileSize);
+      msgOut << connectionId;
+      msgOut << fileSize;
       msgOut << sha256;
       msgOut << filename;
 
@@ -272,9 +269,9 @@ namespace rft
       msg >> windowId;
       msg >> connectionId;
 
-      chunkIdx = ntoh(chunkIdx);
-      rttCurrent = ntoh(rttCurrent);
-      connectionId = ntoh(connectionId);
+      chunkIdx = chunkIdx;
+      rttCurrent = rttCurrent;
+      connectionId = connectionId;
 
       auto search = connections.find(connectionId);
       if (search == connections.end()) {
@@ -286,7 +283,7 @@ namespace rft
          msgOut.header.remote = socket.local_endpoint();
 
          msgOut << ERROR_CONNECTION_NOT_FOUND;
-         msgOut << hton(connectionId);
+         msgOut << connectionId;
 
          send_msg_to_client(msgOut, msg.header.remote);
          return;
@@ -326,10 +323,10 @@ namespace rft
          msgOut.header.size = 0;
 
          msgOut << PAYLOAD;
-         msgOut << hton(connectionId);
+         msgOut << connectionId;
          msgOut << conn.window.id;
-         msgOut << hton(conn.window.currentSize);
-         msgOut << hton(i);
+         msgOut << conn.window.currentSize;
+         msgOut << i;
          msgOut << chunk;
 
          conn.window.store_chunk(chunk, i);
@@ -345,8 +342,6 @@ namespace rft
       ConnectionID connectionId;
 
       msg >> connectionId;
-
-      connectionId = ntoh(connectionId);
 
       PLOG_INFO << "[Server] Received Finish message for connection ID " << connectionId;
       connections.erase(connectionId);
@@ -364,8 +359,6 @@ namespace rft
       msg >> windowId;
       msg >> connectionId;
 
-      connectionId = ntoh(connectionId);
-
       PLOG_INFO << "[Server] Received Retransmission Request for connection ID " << connectionId;
 
       auto search = connections.find(connectionId);
@@ -378,7 +371,7 @@ namespace rft
          msgOut.header.remote = socket.local_endpoint();
 
          msgOut << ERROR_CONNECTION_NOT_FOUND;
-         msgOut << hton(connectionId);
+         msgOut << connectionId;
 
          send_msg_to_client(msgOut, msg.header.remote);
          return;
@@ -402,10 +395,10 @@ namespace rft
             msgOut.header.size = 0;
 
             msgOut << PAYLOAD;
-            msgOut << hton(connectionId);
+            msgOut << connectionId;
             msgOut << conn.window.id;
-            msgOut << hton(conn.window.currentSize);
-            msgOut << hton(i);
+            msgOut << conn.window.currentSize;
+            msgOut << i;
             msgOut << conn.window.chunks[i];
 
             conn.timer.setTimeout(minutes(TIMEOUT), boost::bind(&Server::handle_timeout, this, connectionId));

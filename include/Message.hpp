@@ -2,6 +2,7 @@
 #define ROBUST_FILE_TRANSFER_MESSAGE_HPP
 // ------------------------------------------------------------------------
 #include "common.hpp"
+#include "util.hpp"
 // ------------------------------------------------------------------------
 namespace rft
 {
@@ -48,7 +49,15 @@ namespace rft
       template<typename T>
       friend Message<MsgType>& operator<<(Message<MsgType>& msg, const T& data)
       {
-         std::memcpy(&msg.packet[msg.header.size], &data, sizeof(data));
+         if constexpr (std::is_integral<T>::value) {
+            T tmp = data;
+            tmp = hton(tmp);
+
+            std::memcpy(&msg.packet[msg.header.size], &tmp, sizeof(tmp));
+         } else {
+            std::memcpy(&msg.packet[msg.header.size], &data, sizeof(data));
+         }
+
          msg.header.size += sizeof(data);
          return msg;
       }
@@ -75,6 +84,11 @@ namespace rft
       {
          msg.header.size -= sizeof(data);
          std::memcpy(&data, &msg.packet[msg.header.size], sizeof(data));
+
+         if constexpr (std::is_integral<T>::value) {
+            data = ntoh(data);
+         }
+
          return msg;
       }
 
