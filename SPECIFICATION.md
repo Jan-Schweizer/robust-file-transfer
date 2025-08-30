@@ -15,6 +15,11 @@ pi: [toc, sortrefs, symrefs]
 
 author:
  -
+    ins: J. Schweizer
+    name: Jan Schweizer
+    organization: Technische Universität München
+    email: j.schweizer@tum.de
+ -
     ins: S. Entholzer
     name: Simon Entholzer
     organization: Technische Universität München
@@ -24,11 +29,6 @@ author:
     name: Yi Jiang
     organization: Technische Universität München
     email: yi9.jiang@tum.de
- -
-    ins: J. Schweizer
-    name: Jan Schweizer
-    organization: Technische Universität München
-    email: j.schweizer@tum.de
  -
     ins: N. Zbil
     name: Nityananda Zbil

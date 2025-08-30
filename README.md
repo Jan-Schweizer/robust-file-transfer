@@ -1,10 +1,10 @@
 # Protocol Design Project
 
-This repository contains the implementation of the protocol designed and developed in the TUM "Protocol Design" course.
+This repository contains the implementation of the ARFT (A Robust File Transfer) protocol. It was designed and developed in the TUM "Protocol Design" course.
 
 ## Overview
 
-The goal of this project was to design a robust protocol that fulfills specific requirements regarding reliability, efficiency, and scalability.
+The goal of this project was to design a robust file transfer protocol that fulfills specific requirements regarding reliability, efficiency, and scalability.
 
 ## Specification
 
